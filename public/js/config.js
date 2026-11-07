@@ -113,7 +113,7 @@ const CONFIG = {
   // The score / hold / cooldown settings below apply to both gestures.
   THUMBS_UP_ENABLED: true,
   THUMBS_DOWN_ENABLED: true,
-  THUMBS_UP_MIN_SCORE: 0.7,    // how sure MediaPipe must be that it's a thumbs-up (0 to 1)
+  THUMBS_UP_MIN_SCORE: 0.5,    // how sure MediaPipe must be that it's a thumbs-up or thumbs-down (0 to 1)
   THUMBS_UP_HOLD_MS: 500,      // hold the thumbs-up this long
   THUMBS_UP_COOLDOWN_MS: 2000, // wait this long before another thumbs-up counts
   // Only check for a thumbs-up on every Nth camera frame. This leaves more
