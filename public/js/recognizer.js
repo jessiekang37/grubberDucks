@@ -60,12 +60,17 @@ function deleteAllItems() {
 
 // ---------------------------------------------------------------------------
 // Saving and loading
-// The browser's localStorage can only hold text, so we convert each item's
-// numbers to compact "base64" text and back.
+// The browser's localStorage can only hold text (about 5 MB), so we convert
+// each item's numbers to compact "base64" text and back. To fit more frames,
+// numbers are stored at half precision ("float16"), which halves the size
+// without noticeably changing accuracy.
 // ---------------------------------------------------------------------------
 
+const STORAGE_LIMIT_CHARS = 5000000; // roughly what Chrome allows per site
+const canUseHalfPrecision = typeof Float16Array !== "undefined";
+
 function floatsToBase64(floatArray) {
-  const bytes = new Uint8Array(floatArray.buffer);
+  const bytes = new Uint8Array(floatArray.buffer, floatArray.byteOffset, floatArray.byteLength);
   let binary = "";
   const chunkSize = 8192; // build the string in chunks to avoid a browser limit
   for (let i = 0; i < bytes.length; i += chunkSize) {
@@ -74,10 +79,12 @@ function floatsToBase64(floatArray) {
   return btoa(binary);
 }
 
-function base64ToFloats(text) {
+// halfPrecision = true if the text was saved as float16.
+function base64ToFloats(text, halfPrecision) {
   const binary = atob(text);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  if (halfPrecision) return Float32Array.from(new Float16Array(bytes.buffer));
   return new Float32Array(bytes.buffer);
 }
 
@@ -87,7 +94,8 @@ function exportItemsAsText() {
   const saved = {};
   for (const itemName in dataset) {
     const tensor = dataset[itemName];
-    saved[itemName] = { shape: tensor.shape, data: floatsToBase64(tensor.dataSync()) };
+    const numbers = canUseHalfPrecision ? new Float16Array(tensor.dataSync()) : tensor.dataSync();
+    saved[itemName] = { shape: tensor.shape, half: canUseHalfPrecision, data: floatsToBase64(numbers) };
   }
   return JSON.stringify(saved);
 }
@@ -97,7 +105,8 @@ function importItemsFromText(text) {
   const saved = JSON.parse(text);
   const dataset = {};
   for (const itemName in saved) {
-    dataset[itemName] = tf.tensor2d(base64ToFloats(saved[itemName].data), saved[itemName].shape);
+    const item = saved[itemName];
+    dataset[itemName] = tf.tensor2d(base64ToFloats(item.data, item.half), item.shape);
   }
   classifier.clearAllClasses();
   classifier.setClassifierDataset(dataset);
@@ -112,6 +121,12 @@ function saveItems() {
     console.error("Could not save enrolled items:", err);
     return false;
   }
+}
+
+// How full browser storage is, from 0 to 1.
+function getStorageUsed() {
+  const text = localStorage.getItem(CONFIG.STORAGE_KEY) || "";
+  return text.length / STORAGE_LIMIT_CHARS;
 }
 
 function loadSavedItems() {

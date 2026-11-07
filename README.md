@@ -42,7 +42,7 @@ Restart the server after editing `.env`. Any vision-capable model on OpenRouter 
 
 1. Click **Enroll items** (top bar).
 2. Tap **Nothing (empty area)**. Point the camera at your empty packing area, with hands moving in view but no item, and press **Capture**. *Do this first.* It stops PackPal from "seeing" items that aren't there.
-3. For each menu item: tap or type its name and press **Capture**. During the ~3 seconds, **swipe the item across the camera a few times at real packing speed**, from different sides and angles. This teaches PackPal what a blurry, moving item looks like. Capture twice per item for best results.
+3. For each menu item: tap or type its name and press **Capture**. After a 3-second countdown, it captures 60 frames over ~6 seconds. During that time, **swipe the item across the camera a few times at real packing speed**, from different sides and angles. This teaches PackPal what a blurry, moving item looks like. Capture twice per item for best results.
 4. Click **Export backup** to save what it learned to a file.
 
 Item names must match the names on orders (upper/lower case doesn't matter). Enrollment is saved in the browser and survives a reload.
@@ -166,7 +166,7 @@ Lookalike groups only trigger an AI check when **two items from the same group a
 - **One item at a time.** Two identical items swiped together, or back-to-back with no gap, count as one. The camera needs to see a brief empty moment between them.
 - **Motion blur.** Very fast swipes in dim light produce blurry frames. Enroll by swiping, and keep the station well lit.
 - **Confidence comes in 10% steps.** KNN confidence is "votes out of 10", so a threshold of 0.65 effectively means 70%.
-- **Storage.** Enrolled items live in this browser's local storage (roughly 25 items × 25 frames). Clearing site data erases them, so use **Export backup**. They don't sync between devices.
+- **Storage.** Enrolled items live in this browser's local storage (about 1,500 frames total, roughly 12 items captured twice; the enroll screen shows how full it is). Clearing site data erases them, so use **Export backup**. They don't sync between devices. A full restaurant menu would need a bigger store (e.g. IndexedDB) or a server.
 - **Camera access needs localhost or HTTPS.** A tablet connecting to the laptop over Wi-Fi can't use its camera without an HTTPS setup.
 - **Ticket photos from a webcam** are often too low-resolution for small print. Uploading a phone photo works better.
 - **Orders are mock data.** There's no real DoorDash/Grubhub/Uber Eats integration, and orders reset on reload.

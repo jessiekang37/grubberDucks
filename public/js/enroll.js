@@ -51,6 +51,12 @@ function renderEnrollScreen() {
       .join("");
   }
 
+  // How full browser storage is
+  const used = Math.round(getStorageUsed() * 100);
+  const storageEl = document.getElementById("storage-meter");
+  storageEl.textContent = `Storage used: ${used}%` + (used >= 80 ? " (nearly full: export a backup)" : "");
+  storageEl.classList.toggle("warn", used >= 80);
+
   // Remind staff about the background class
   const tipEl = document.getElementById("enroll-tip");
   tipEl.style.display = counts[CONFIG.BACKGROUND_LABEL] ? "none" : "block";
@@ -84,7 +90,15 @@ async function onCapture() {
 
   isCapturing = true;
   button.disabled = true;
-  button.textContent = "Capturing… keep moving it slowly";
+
+  // Countdown, so staff can get the item ready before frames are grabbed.
+  for (let s = CONFIG.CAPTURE_COUNTDOWN_S; s > 0; s--) {
+    button.textContent = `Get ready… ${s}`;
+    showScanNotice(`Get ready… ${s}`, "warn");
+    await wait(1000);
+  }
+  showScanNotice("Swipe it across now!", "success");
+  button.textContent = "Capturing… keep swiping";
 
   for (let i = 0; i < CONFIG.FRAMES_PER_CAPTURE; i++) {
     addExampleFromVideo(getCameraVideo(), itemName);

@@ -606,6 +606,8 @@ button {
 }
 .enrolled-name { flex: 1; font-size: 20px; font-weight: 700; }
 .enrolled-count { color: var(--text-dim); font-size: 17px; }
+.storage-meter { color: var(--text-dim); font-size: 15px; }
+.storage-meter.warn { color: var(--amber); font-weight: 700; }
 
 .delete-btn, .small-btn {
   min-height: 48px;

@@ -7,10 +7,15 @@ const CONFIG = {
   MODEL_URL: "/vendor/mobilenet/model.json",
 
   // How many frames to grab each time you press "Capture" on the enroll screen.
-  FRAMES_PER_CAPTURE: 25,
+  // More frames = more accurate, but uses more browser storage.
+  FRAMES_PER_CAPTURE: 60,
 
-  // Milliseconds between captured frames. 25 frames × 120ms ≈ 3 seconds.
-  CAPTURE_INTERVAL_MS: 120,
+  // Milliseconds between captured frames. 60 frames × 100ms ≈ 6 seconds.
+  CAPTURE_INTERVAL_MS: 100,
+
+  // Seconds of "get ready" countdown before capturing starts, so the first
+  // frames aren't of your hand coming back from the button.
+  CAPTURE_COUNTDOWN_S: 3,
 
   // Pause between recognition attempts (milliseconds). Small = fast scanning.
   // The real speed is limited by how fast the laptop runs the model (~20-30 per second).
