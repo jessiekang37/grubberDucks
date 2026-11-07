@@ -3,14 +3,14 @@
 // The API key lives only on the server; the browser never sees it.
 
 // Grab the current camera frame as a small JPEG image (as text the server can send on).
-function captureFrameAsJpeg(maxWidth = 512) {
+function captureFrameAsJpeg(maxWidth = 512, quality = 0.8) {
   const video = getCameraVideo();
   const scale = Math.min(1, maxWidth / video.videoWidth);
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(video.videoWidth * scale);
   canvas.height = Math.round(video.videoHeight * scale);
   canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.8);
+  return canvas.toDataURL("image/jpeg", quality);
 }
 
 // Returns the item name the AI picked (always one of itemNames) or "unsure".
@@ -28,4 +28,20 @@ async function askAiWhichItem(itemNames) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "AI request failed");
   return data.item;
+}
+
+// Send a ticket photo to /api/ticket. Returns
+// { orderNumber, platform, customer, items: [{ name, qty, note }] }
+// knownNames = menu items the app already knows, so the AI uses the same names.
+async function askAiToReadTicket(imageDataUrl, knownNames) {
+  const response = await fetch("/api/ticket", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: imageDataUrl, knownNames: knownNames }),
+    signal: AbortSignal.timeout(CONFIG.TICKET_TIMEOUT_MS),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "AI request failed");
+  return data;
 }

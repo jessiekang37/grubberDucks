@@ -12,8 +12,9 @@ const CONFIG = {
   // Milliseconds between captured frames. 25 frames × 120ms ≈ 3 seconds.
   CAPTURE_INTERVAL_MS: 120,
 
-  // How often the camera tries to recognize what it sees (milliseconds).
-  PREDICT_INTERVAL_MS: 150,
+  // Pause between recognition attempts (milliseconds). Small = fast scanning.
+  // The real speed is limited by how fast the laptop runs the model (~20-30 per second).
+  PREDICT_INTERVAL_MS: 30,
 
   // KNN "k": how many of the closest enrolled examples get a vote.
   // Confidence = share of those votes the winning item got (e.g. 9 of 10 = 0.9).
@@ -32,14 +33,15 @@ const CONFIG = {
   SCAN_CONFIDENCE: 0.85,
 
   // How long (ms) the item must stay recognized before it's checked off.
-  HOLD_MS: 700,
+  // Raise to 600-700 if things get scanned by accident.
+  HOLD_MS: 300,
 
   // After any scan, wait this long (ms) before another scan can happen.
-  SCAN_COOLDOWN_MS: 1200,
+  SCAN_COOLDOWN_MS: 400,
 
   // A scanned item can't count again until it has been OUT of view this long (ms).
   // This is what stops one Coffee from being counted twice.
-  RELEASE_MS: 400,
+  RELEASE_MS: 250,
 
   // How long the "✓ Coffee 1/2" or "not on this order" message stays up (ms).
   SCAN_NOTICE_MS: 1800,
@@ -54,7 +56,8 @@ const CONFIG = {
   AI_LOW_CONFIDENCE: 0.5,
 
   // Give up on the AI after this long (ms) and ask staff to tap-confirm instead.
-  AI_TIMEOUT_MS: 6000,
+  // Scanning keeps going while the AI thinks, so this doesn't slow staff down.
+  AI_TIMEOUT_MS: 5000,
 
   // Groups of items that look alike. If the camera sees one of these AND another
   // item from the same group is also enrolled, we always double-check with the
@@ -68,4 +71,15 @@ const CONFIG = {
 
   // The "tap to confirm" panel closes by itself after this long (ms).
   CONFIRM_AUTO_CLOSE_MS: 12000,
+
+  // ---- Thumbs-up to mark ready (MediaPipe) ----
+  // A thumbs-up presses "Mark ready". It goes through the same check as a tap,
+  // so an order with missing items is still blocked.
+  THUMBS_UP_ENABLED: true,
+  THUMBS_UP_MIN_SCORE: 0.7,    // how sure MediaPipe must be that it's a thumbs-up (0 to 1)
+  THUMBS_UP_HOLD_MS: 500,      // hold the thumbs-up this long
+  THUMBS_UP_COOLDOWN_MS: 2000, // wait this long before another thumbs-up counts
+
+  // ---- Ticket photo to order (Milestone 5) ----
+  TICKET_TIMEOUT_MS: 25000, // reading a whole ticket takes longer than one item
 };

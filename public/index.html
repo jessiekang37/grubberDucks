@@ -27,7 +27,10 @@
 
       <!-- LEFT: order queue + ready for pickup -->
       <aside class="sidebar">
-        <h3 class="section-title">Order queue</h3>
+        <div class="queue-header">
+          <h3 class="section-title">Order queue</h3>
+          <button class="scan-ticket-btn" onclick="onOpenTicketScanner()">＋ Scan ticket</button>
+        </div>
         <div id="queue-list" class="queue-list"></div>
 
         <h3 class="section-title">Ready for pickup</h3>
@@ -50,6 +53,10 @@
               <video id="camera-video" autoplay muted playsinline></video>
               <div id="scan-notice" class="scan-notice"></div>
               <div id="ai-checking" class="ai-checking"><span class="spinner"></span>Checking with AI…</div>
+              <div id="thumbs-indicator" class="thumbs-indicator">
+                <span>👍 Marking ready…</span>
+                <div class="thumbs-track"><div id="thumbs-bar" class="thumbs-bar"></div></div>
+              </div>
               <div class="hold-track"><div id="hold-bar" class="hold-bar"></div></div>
             </div>
             <div class="prediction">
@@ -108,6 +115,49 @@
       </div>
     </main>
 
+    <!-- ===================== TICKET SCANNER (pop-up) ===================== -->
+    <div id="ticket-modal" class="modal-backdrop" hidden>
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Scan an order ticket</h2>
+          <button class="top-btn" onclick="onCloseTicketScanner()">✕ Close</button>
+        </div>
+        <div class="modal-body">
+          <div id="ticket-camera-slot" class="ticket-camera"></div>
+
+          <div class="ticket-panel">
+            <div id="ticket-step-capture">
+              <p class="enroll-help">Hold the ticket flat and close to the camera so the text fills the picture, then take a photo.</p>
+              <button class="capture-btn wide" onclick="onTakeTicketPhoto()">📸 Take photo</button>
+              <label class="small-btn wide">⬆ Upload photo instead
+                <input type="file" accept="image/*" onchange="onUploadTicketPhoto(this)" hidden>
+              </label>
+            </div>
+
+            <div id="ticket-step-reading" hidden>
+              <img id="ticket-photo" class="ticket-photo" alt="Ticket photo">
+              <p class="reading"><span class="spinner"></span> Reading ticket with AI…</p>
+            </div>
+
+            <div id="ticket-step-review" hidden>
+              <p class="enroll-help">Check what the AI read. Fix quantities with − / +, then add the order.</p>
+              <div id="ticket-summary" class="ticket-summary"></div>
+              <div id="ticket-items" class="ticket-items"></div>
+              <div class="ticket-actions">
+                <button class="small-btn" onclick="showTicketStep('capture')">Retake</button>
+                <button id="add-ticket-btn" class="capture-btn" onclick="onAddTicketOrder()">Add order</button>
+              </div>
+            </div>
+
+            <div id="ticket-step-error" hidden>
+              <p id="ticket-error-message" class="ticket-error"></p>
+              <button class="capture-btn wide" onclick="showTicketStep('capture')">Try again</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" class="toast"></div>
   </div>
 
@@ -126,6 +176,9 @@
   <script src="js/sounds.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/scanner.js"></script>
+  <script src="js/ticket.js"></script>
   <script src="js/app.js"></script>
+  <!-- MediaPipe thumbs-up detection (a "module" script, loads after the rest) -->
+  <script type="module" src="js/gesture.js"></script>
 </body>
 </html>

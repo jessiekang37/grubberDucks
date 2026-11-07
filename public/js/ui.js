@@ -103,7 +103,8 @@ function renderChecklist() {
         <li class="check-item ${done ? "done" : ""}" data-item-index="${index}">
           <button class="check-main" onclick="onTapItem(${index})" ${done ? "disabled" : ""}>
             <span class="checkbox">${done ? "✓" : ""}</span>
-            <span class="item-name">${escapeHtml(item.name)} ${tapOnlyTag}</span>
+            <span class="item-name">${escapeHtml(item.name)} ${tapOnlyTag}
+              ${item.note ? `<span class="item-note">${escapeHtml(item.note)}</span>` : ""}</span>
             <span class="item-count">${item.scanned} / ${item.qty}</span>
           </button>
           <button class="undo-btn" onclick="onUndoItem(${index})" ${item.scanned === 0 ? "disabled" : ""}
@@ -224,6 +225,14 @@ function showConfirmPanel(reason, choices) {
 
 function hideConfirmPanel() {
   document.getElementById("confirm-panel").hidden = true;
+}
+
+// ---- Thumbs-up feedback ----
+// progress goes from 0 to 1 while a thumbs-up is held.
+function setThumbsUpProgress(progress) {
+  const indicator = document.getElementById("thumbs-indicator");
+  indicator.classList.toggle("visible", progress > 0);
+  document.getElementById("thumbs-bar").style.width = Math.round(progress * 100) + "%";
 }
 
 // Redraw everything.

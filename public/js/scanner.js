@@ -8,6 +8,7 @@
 //     - unsure (between AI_LOW_CONFIDENCE and SCAN_CONFIDENCE), or a lookalike
 //       item like Coke vs Diet Coke -> ask the AI (Milestone 4)
 //     - AI unsure / fails / too slow -> ask staff to tap-confirm
+//     The AI check runs in the background: staff can keep scanning other items.
 //  3. After a scan, that item is "locked" until it leaves the camera's view,
 //     and a short cooldown applies. This stops one item counting twice.
 //
@@ -20,7 +21,8 @@ let holdStartTime = 0;     // when we started seeing it
 let lockedLabel = null;    // item just scanned, waiting to leave view
 let lockedLastSeen = 0;    // last time we saw the locked item
 let lastScanTime = -Infinity; // when the last scan happened (never, at start)
-let isAiChecking = false;  // true while waiting for the AI
+let aiChecksRunning = 0;   // how many AI checks are waiting for an answer
+let aiGeneration = 0;      // goes up to cancel AI answers that arrive too late
 let confirmOrderId = null; // set while the "tap to confirm" panel is open
 let confirmTimer = null;
 
@@ -55,12 +57,6 @@ function handlePrediction(result) {
   if (lockedLabel) {
     if (topLabel === lockedLabel) lockedLastSeen = now;
     else if (now - lockedLastSeen > CONFIG.RELEASE_MS) lockedLabel = null;
-  }
-
-  // Pause scanning while the AI is thinking or staff are confirming.
-  if (isAiChecking || confirmOrderId) {
-    resetHold();
-    return;
   }
 
   // Step 2: is there an item we could scan right now?
@@ -123,9 +119,17 @@ function onItemScanned(order, label, source) {
   playSound(getMissingItems(order).length === 0 ? "complete" : "success");
 }
 
-// ---- AI fallback ----
+// ---- AI fallback (runs in the background) ----
+
+// Ignore any AI answers still on their way. Called when staff tap an item by
+// hand or switch orders, so a late AI answer can't count the same item twice.
+function cancelPendingAiChecks() {
+  aiGeneration += 1;
+}
+
 async function checkWithAi(order, cameraGuess) {
-  isAiChecking = true;
+  const myGeneration = aiGeneration;
+  aiChecksRunning += 1;
   showAiChecking(true);
 
   let reason;
@@ -133,8 +137,8 @@ async function checkWithAi(order, cameraGuess) {
     const itemNames = order.items.map((item) => item.name);
     const answer = await askAiWhichItem(itemNames);
 
-    // Staff may have switched orders while we waited. If so, ignore the answer.
-    if (getActiveOrder() !== order) return;
+    // Too late (staff tapped by hand or switched orders)? Ignore the answer.
+    if (myGeneration !== aiGeneration || getActiveOrder() !== order) return;
 
     if (answer !== "unsure") {
       onItemScanned(order, answer, "AI");
@@ -145,15 +149,15 @@ async function checkWithAi(order, cameraGuess) {
     console.warn("AI check failed:", err.message);
     reason = err.name === "TimeoutError" ? "AI took too long." : "AI unavailable.";
   } finally {
-    isAiChecking = false;
-    showAiChecking(false);
-    lastScanTime = performance.now(); // short pause before the next scan
+    aiChecksRunning -= 1;
+    showAiChecking(aiChecksRunning > 0);
   }
 
-  if (getActiveOrder() === order) openConfirm(order, cameraGuess, reason);
+  if (myGeneration === aiGeneration && getActiveOrder() === order) openConfirm(order, cameraGuess, reason);
 }
 
 // ---- "Tap to confirm" panel (when neither camera nor AI is sure) ----
+// Scanning keeps working while this panel is open.
 function openConfirm(order, cameraGuess, reason) {
   // Offer the unscanned items, with the camera's guess and its lookalikes first.
   const likelyNames = [cameraGuess, ...getLookalikesOf(cameraGuess)].map((n) => n.toLowerCase());
@@ -179,7 +183,6 @@ function closeConfirm() {
   confirmOrderId = null;
   clearTimeout(confirmTimer);
   hideConfirmPanel();
-  lastScanTime = performance.now();
 }
 
 // Staff tapped one of the choices in the confirm panel.

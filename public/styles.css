@@ -410,6 +410,100 @@ button {
   color: var(--text-dim);
 }
 
+/* ---------- Thumbs-up indicator ---------- */
+.thumbs-indicator {
+  position: absolute;
+  left: 10px; right: 10px; bottom: 20px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(21, 128, 61, 0.92);
+  font-size: 20px;
+  font-weight: 800;
+  display: flex; flex-direction: column; gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+.thumbs-indicator.visible { opacity: 1; }
+.thumbs-track { height: 8px; background: rgba(0, 0, 0, 0.35); border-radius: 4px; overflow: hidden; }
+.thumbs-bar { height: 100%; width: 0%; background: white; }
+
+/* Modifier note from a ticket, e.g. "no pickles" */
+.item-note {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--amber);
+  margin-top: 2px;
+}
+
+/* ---------- Ticket scanner ---------- */
+.queue-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.scan-ticket-btn {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 2px solid var(--blue);
+  border-radius: 999px;
+  color: #bfdbfe;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.modal {
+  width: min(1100px, 96vw);
+  max-height: 94vh;
+  background: var(--panel);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; }
+.modal-header h2 { font-size: 28px; }
+.modal-body { display: flex; gap: 20px; min-height: 0; }
+.ticket-camera { width: 520px; flex-shrink: 0; }
+.ticket-panel { flex: 1; min-width: 0; overflow-y: auto; }
+.ticket-panel > div { display: flex; flex-direction: column; gap: 14px; }
+
+.wide { width: 100%; justify-content: center; }
+.ticket-photo { width: 100%; max-height: 300px; object-fit: contain; border-radius: 10px; background: #000; }
+.reading { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 700; }
+.ticket-error { font-size: 20px; color: #fecaca; line-height: 1.4; }
+
+.ticket-summary { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ticket-items { display: flex; flex-direction: column; gap: 8px; }
+.ticket-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-raised);
+  border-radius: 10px;
+  padding: 8px 8px 8px 16px;
+}
+.ticket-item-name { flex: 1; font-size: 22px; font-weight: 700; min-width: 0; }
+.ticket-qty { width: 36px; text-align: center; font-size: 24px; font-weight: 800; }
+.qty-btn {
+  width: 52px; height: 52px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  font-size: 28px;
+  font-weight: 800;
+}
+.ticket-actions { display: flex; gap: 10px; justify-content: space-between; }
+.ticket-actions .capture-btn { flex: 1; }
+.platform-other { background: #52525b; }
+
 /* Items the camera hasn't learned yet */
 .tap-only-tag {
   font-size: 14px;

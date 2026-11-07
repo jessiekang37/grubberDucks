@@ -110,7 +110,8 @@ function addOrder(order) {
     platform: order.platform,
     customer: order.customer || "",
     status: "waiting",
-    items: order.items.map((item) => ({ name: item.name, qty: item.qty, scanned: 0 })),
+    // "note" holds modifiers read from a ticket, e.g. "no pickles" (shown as a reminder).
+    items: order.items.map((item) => ({ name: item.name, qty: item.qty, note: item.note || "", scanned: 0 })),
   };
   orders.push(newOrder);
   return newOrder;

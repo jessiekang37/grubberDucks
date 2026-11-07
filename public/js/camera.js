@@ -29,3 +29,14 @@ function moveCameraTo(containerId) {
   const cameraBox = document.getElementById("camera-box");
   document.getElementById(containerId).appendChild(cameraBox);
 }
+
+// Ask the webcam for a sharper picture (for reading tickets) or go back to
+// normal size (faster for scanning). If the camera can't, it just keeps going.
+function setCameraHighRes(highRes) {
+  const stream = getCameraVideo().srcObject;
+  if (!stream) return;
+  const track = stream.getVideoTracks()[0];
+  track
+    .applyConstraints(highRes ? { width: { ideal: 1920 }, height: { ideal: 1080 } } : { width: { ideal: 640 }, height: { ideal: 480 } })
+    .catch((err) => console.warn("Camera resolution change failed:", err));
+}
