@@ -90,14 +90,20 @@ function renderChecklist() {
     </div>
     <span class="platform-tag big ${platformClass(order.platform)}">${escapeHtml(order.platform)}</span>`;
 
+  // Names the camera has learned (lowercase), so we can flag items it can't scan.
+  const enrolledNames = Object.keys(getEnrolledCounts()).map((name) => name.toLowerCase());
+
   listEl.innerHTML = order.items
     .map((item, index) => {
       const done = item.scanned >= item.qty;
+      const cameraKnowsIt = enrolledNames.includes(item.name.toLowerCase());
+      const tapOnlyTag =
+        !done && hasEnrolledItems() && !cameraKnowsIt ? `<span class="tap-only-tag">tap only</span>` : "";
       return `
         <li class="check-item ${done ? "done" : ""}" data-item-index="${index}">
           <button class="check-main" onclick="onTapItem(${index})" ${done ? "disabled" : ""}>
             <span class="checkbox">${done ? "✓" : ""}</span>
-            <span class="item-name">${escapeHtml(item.name)}</span>
+            <span class="item-name">${escapeHtml(item.name)} ${tapOnlyTag}</span>
             <span class="item-count">${item.scanned} / ${item.qty}</span>
           </button>
           <button class="undo-btn" onclick="onUndoItem(${index})" ${item.scanned === 0 ? "disabled" : ""}
@@ -167,7 +173,57 @@ function renderPrediction(result) {
   labelEl.textContent = result.label;
   labelEl.classList.remove("dim");
   barEl.style.width = percent + "%";
+  barEl.classList.toggle("above-threshold", result.confidence >= CONFIG.SCAN_CONFIDENCE);
   percentEl.textContent = percent + "%";
+}
+
+// ---- Scanning feedback (Milestone 3) ----
+
+// Bar along the bottom of the video that fills while an item is held up.
+// progress goes from 0 to 1.
+function setHoldProgress(progress) {
+  document.getElementById("hold-bar").style.width = Math.round(progress * 100) + "%";
+}
+
+// Big message over the camera, e.g. "✓ Coffee 1/2". kind = "success" or "warn".
+let scanNoticeTimer = null;
+function showScanNotice(message, kind) {
+  const noticeEl = document.getElementById("scan-notice");
+  const cameraBox = document.getElementById("camera-box");
+  noticeEl.textContent = message;
+  noticeEl.className = "scan-notice visible " + kind;
+  cameraBox.classList.remove("flash-success", "flash-warn");
+  void cameraBox.offsetWidth; // restart the flash animation
+  cameraBox.classList.add("flash-" + kind);
+
+  clearTimeout(scanNoticeTimer);
+  scanNoticeTimer = setTimeout(() => {
+    noticeEl.classList.remove("visible");
+  }, CONFIG.SCAN_NOTICE_MS);
+}
+
+// Briefly highlight a checklist row that was just scanned.
+function flashChecklistItem(itemIndex) {
+  const row = document.querySelector(`.check-item[data-item-index="${itemIndex}"]`);
+  if (row) row.classList.add("just-scanned");
+}
+
+// ---- AI fallback feedback (Milestone 4) ----
+function showAiChecking(isChecking) {
+  document.getElementById("ai-checking").classList.toggle("visible", isChecking);
+}
+
+// choices = [{ name, index }] items staff can tap to confirm
+function showConfirmPanel(reason, choices) {
+  document.getElementById("confirm-reason").textContent = reason + " What are you holding?";
+  document.getElementById("confirm-choices").innerHTML = choices
+    .map((c) => `<button class="confirm-choice" onclick="onConfirmChoice(${c.index})">${escapeHtml(c.name)}</button>`)
+    .join("");
+  document.getElementById("confirm-panel").hidden = false;
+}
+
+function hideConfirmPanel() {
+  document.getElementById("confirm-panel").hidden = true;
 }
 
 // Redraw everything.

@@ -5,6 +5,8 @@
 function onSelectOrder(orderId) {
   setActiveOrder(orderId);
   hideMissingWarning();
+  resetHold();
+  closeConfirm();
   render();
 }
 
@@ -35,6 +37,7 @@ function onMarkReady() {
   const result = markOrderReady(order);
   if (!result.ok) {
     showMissingWarning(result.missing);
+    playSound("error");
     return;
   }
 
@@ -70,6 +73,7 @@ function onToggleEnrollScreen() {
   button.textContent = goingToEnroll ? "← Back to orders" : "Enroll items";
   moveCameraTo(goingToEnroll ? "enroll-camera-slot" : "main-camera-slot");
   if (goingToEnroll) renderEnrollScreen();
+  else render(); // enrolled items may have changed
 }
 
 // ---- Recognition loop ----
@@ -79,6 +83,8 @@ async function predictionLoop() {
     if (isRecognizerReady() && isCameraReady() && !isCapturing) {
       const result = await predictFromVideo(getCameraVideo());
       renderPrediction(result);
+      // Only scan while the orders screen is showing (not while enrolling).
+      if (!document.getElementById("main-screen").hidden) handlePrediction(result);
       if (!result) setCameraStatus("No items enrolled yet. Tap \"Enroll items\".");
       else if (!getEnrolledCounts()[CONFIG.BACKGROUND_LABEL]) setCameraStatus("Tip: enroll \"Nothing\" so an empty view isn't mistaken for an item.");
       else setCameraStatus("");
@@ -104,6 +110,7 @@ async function startCameraAndRecognizer() {
     setCameraStatus("Loading recognition model…");
     await loadRecognizer();
     setCameraStatus("");
+    render(); // redraw so "tap only" tags reflect what's enrolled
     predictionLoop();
   } catch (err) {
     console.error(err);
