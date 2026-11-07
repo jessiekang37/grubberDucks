@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PackPal</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+
+    <!-- Top bar -->
+    <header class="top-bar">
+      <div class="logo">Pack<span>Pal</span></div>
+      <div class="top-bar-right">
+        <button id="enroll-toggle-btn" class="top-btn" onclick="onToggleEnrollScreen()">Enroll items</button>
+        <label class="demo-switch">
+          <input type="checkbox" id="demo-toggle" onchange="onToggleDemoMode()">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          Demo mode
+        </label>
+      </div>
+    </header>
+
+    <!-- ===================== MAIN SCREEN: orders ===================== -->
+    <main id="main-screen" class="main">
+
+      <!-- LEFT: order queue + ready for pickup -->
+      <aside class="sidebar">
+        <h3 class="section-title">Order queue</h3>
+        <div id="queue-list" class="queue-list"></div>
+
+        <h3 class="section-title">Ready for pickup</h3>
+        <div id="ready-list" class="ready-list"></div>
+      </aside>
+
+      <!-- RIGHT: active order -->
+      <section class="active-order">
+        <div class="checklist-panel">
+          <div id="order-header" class="order-header"></div>
+          <ul id="checklist" class="checklist"></ul>
+          <div id="missing-warning" class="missing-warning" role="alert"></div>
+          <button id="mark-ready-btn" class="mark-ready-btn" onclick="onMarkReady()">Mark ready</button>
+        </div>
+
+        <div id="main-camera-slot" class="camera-panel">
+          <!-- The camera box lives here. It moves to the enroll screen when that's open. -->
+          <div id="camera-box" class="camera-box">
+            <div class="video-wrap">
+              <video id="camera-video" autoplay muted playsinline></video>
+            </div>
+            <div class="prediction">
+              <div class="prediction-top">
+                <span id="prediction-label" class="prediction-label dim">No item</span>
+                <span id="confidence-percent" class="confidence-percent"></span>
+              </div>
+              <div class="confidence-track"><div id="confidence-bar" class="confidence-bar"></div></div>
+            </div>
+            <p id="camera-status" class="camera-status">Starting camera…</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ===================== ENROLL SCREEN ===================== -->
+    <main id="enroll-screen" class="main enroll" hidden>
+      <div id="enroll-camera-slot" class="enroll-camera"></div>
+
+      <div class="enroll-panel">
+        <h2>Teach PackPal an item</h2>
+        <p class="enroll-help">
+          Type the item's name (it must match the name on orders). Hold the item up and press Capture.
+          While it captures, slowly turn the item and move it closer and farther.
+        </p>
+
+        <div id="enroll-tip" class="enroll-tip">
+          👉 First, enroll <strong>Nothing (empty area)</strong>: point the camera at the empty packing
+          area, with your hands moving around but no item. This stops PackPal from "seeing" items that aren't there.
+        </div>
+
+        <div id="name-suggestions" class="chips"></div>
+
+        <div class="capture-row">
+          <input id="item-name-input" class="name-input" type="text" placeholder="Item name, e.g. Coffee" autocomplete="off">
+          <button id="capture-btn" class="capture-btn" onclick="onCapture()">📸 Capture frames</button>
+        </div>
+        <div class="capture-progress"><div id="capture-progress-bar" class="capture-progress-bar"></div></div>
+
+        <h3 class="section-title">Enrolled items</h3>
+        <div id="enrolled-list" class="enrolled-list"></div>
+
+        <div class="backup-row">
+          <button class="small-btn" onclick="onExportItems()">⬇ Export backup</button>
+          <label class="small-btn">⬆ Import backup
+            <input type="file" accept=".json,application/json" onchange="onImportItems(this)" hidden>
+          </label>
+          <button class="small-btn danger" onclick="onDeleteAllItems()">Delete all</button>
+        </div>
+      </div>
+    </main>
+
+    <div id="toast" class="toast"></div>
+  </div>
+
+  <!-- AI libraries (saved locally in /vendor so they work without internet) -->
+  <script src="vendor/tf.min.js"></script>
+  <script src="vendor/mobilenet.min.js"></script>
+  <script src="vendor/knn-classifier.min.js"></script>
+
+  <!-- Our code. Load order matters: settings and data first, wiring last. -->
+  <script src="js/config.js"></script>
+  <script src="js/orders.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/camera.js"></script>
+  <script src="js/recognizer.js"></script>
+  <script src="js/enroll.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
