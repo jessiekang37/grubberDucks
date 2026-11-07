@@ -28,16 +28,27 @@ const CONFIG = {
   STORAGE_KEY: "packpal-enrolled-items",
 
   // ---- Scanning (Milestone 3) ----
-  // How sure the camera must be before a scan can count (0 to 1).
-  // Note: with KNN_K = 10, confidence moves in steps of 0.1, so 0.85 means "at least 90%".
-  SCAN_CONFIDENCE: 0.85,
+  // Tuned for SWIPING items across the camera: fast, slightly less accurate.
+  // For a slower, more careful "hold it up" style, use:
+  //   SCAN_CONFIDENCE: 0.85, SWIPE_MIN_FRAMES: 6
 
-  // How long (ms) the item must stay recognized before it's checked off.
-  // Raise to 600-700 if things get scanned by accident.
-  HOLD_MS: 300,
+  // How sure the camera must be for a frame to count as "confident" (0 to 1).
+  // Note: with KNN_K = 10, confidence moves in steps of 0.1, so 0.65 means "at least 70%".
+  SCAN_CONFIDENCE: 0.65,
+
+  // How many confident frames are needed to check an item off.
+  // A swipe across the camera gives roughly 5-10 frames. Raise to 3-4 if
+  // items get scanned by accident.
+  SWIPE_MIN_FRAMES: 2,
+
+  // How long (ms) with no sighting before we decide an item has left the view.
+  SWIPE_GAP_MS: 150,
+
+  // If an item stays in view this long (ms) but is never confident, ask the AI anyway.
+  UNSURE_DECIDE_MS: 800,
 
   // After any scan, wait this long (ms) before another scan can happen.
-  SCAN_COOLDOWN_MS: 400,
+  SCAN_COOLDOWN_MS: 200,
 
   // A scanned item can't count again until it has been OUT of view this long (ms).
   // This is what stops one Coffee from being counted twice.
@@ -53,7 +64,7 @@ const CONFIG = {
 
   // If the camera's confidence is at least this but below SCAN_CONFIDENCE,
   // it's "unsure" and we ask the AI. Below this, we ignore it.
-  AI_LOW_CONFIDENCE: 0.5,
+  AI_LOW_CONFIDENCE: 0.4,
 
   // Give up on the AI after this long (ms) and ask staff to tap-confirm instead.
   // Scanning keeps going while the AI thinks, so this doesn't slow staff down.
@@ -79,6 +90,9 @@ const CONFIG = {
   THUMBS_UP_MIN_SCORE: 0.7,    // how sure MediaPipe must be that it's a thumbs-up (0 to 1)
   THUMBS_UP_HOLD_MS: 500,      // hold the thumbs-up this long
   THUMBS_UP_COOLDOWN_MS: 2000, // wait this long before another thumbs-up counts
+  // Only check for a thumbs-up on every Nth camera frame. This leaves more
+  // time for item recognition, so swipes get more frames.
+  THUMBS_UP_EVERY_N_FRAMES: 3,
 
   // ---- Ticket photo to order (Milestone 5) ----
   TICKET_TIMEOUT_MS: 25000, // reading a whole ticket takes longer than one item

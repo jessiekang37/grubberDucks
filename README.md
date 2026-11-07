@@ -42,7 +42,7 @@ Restart the server after editing `.env`. Any vision-capable model on OpenRouter 
 
 1. Click **Enroll items** (top bar).
 2. Tap **Nothing (empty area)**. Point the camera at your empty packing area, with hands moving in view but no item, and press **Capture**. *Do this first.* It stops PackPal from "seeing" items that aren't there.
-3. For each menu item: tap or type its name, hold it up, and press **Capture**. During the ~3 seconds, slowly turn it and move it closer and farther.
+3. For each menu item: tap or type its name and press **Capture**. During the ~3 seconds, **swipe the item across the camera a few times at real packing speed**, from different sides and angles. This teaches PackPal what a blurry, moving item looks like. Capture twice per item for best results.
 4. Click **Export backup** to save what it learned to a file.
 
 Item names must match the names on orders (upper/lower case doesn't matter). Enrollment is saved in the browser and survives a reload.
@@ -53,8 +53,8 @@ Item names must match the names on orders (upper/lower case doesn't matter). Enr
 
 | Action | How |
 |---|---|
-| Scan an item | Hold it up until the green bar fills (~0.3 s). Beep = counted. |
-| Scan 2 of the same item | Scan one, move it fully out of view, scan the next. |
+| Scan an item | Swipe it across the camera (or hold it up). Beep = counted. |
+| Scan 2 of the same item | Swipe one, then the next, with a brief gap (~¼ s) of empty view between. |
 | Camera can't scan something | Tap the item in the checklist. ↺ undoes one. |
 | Finish an order | Tap **Mark ready**, or hold a 👍 to the camera. |
 | Add an order from a printed ticket | **＋ Scan ticket**, then take or upload a photo, review, and **Add order**. |
@@ -82,11 +82,13 @@ Camera frame
                  KNN classifier (compares to your enrolled frames)
                          │
          ┌───────────────┼──────────────────────────┐
-     ≥ 85% sure      50–85% sure, or a           < 50%
-     not lookalike   lookalike (Coke/Diet Coke)  ignored
+  2+ frames ≥ 70%    only 40–70% frames (sent    < 40%
+  not lookalike      once item leaves view),     ignored
+                     or a lookalike
          │               │
          │               ▼
-         │       Vision AI via /api/vision (runs in background)
+         │       Vision AI via /api/vision, given the swipe's clearest frame
+         │       (runs in the background)
          │       "Which of THESE order items is it, or 'unsure'?"
          │               │
          │       ┌───────┴────────┐
@@ -106,7 +108,9 @@ Camera frame
 
 **The AI is boxed in.** Prompts are written on the server, not in the browser. For item checks, the server only accepts an exact item name from the current order; anything else becomes "unsure". For tickets, the server cleans the result (drops prices and invalid quantities, merges duplicates, matches names to your menu), and staff review it before it's added.
 
-**Double counting is prevented** by a hold time, a cooldown, and a "lock": after an item is scanned, it can't count again until it has left the camera's view.
+**Built for swiping.** Each item passing the camera becomes a "candidate". If 2 frames recognize it confidently, it's checked off immediately. A quick swipe gives about 5–10 frames. If it was only ever blurry or unsure, the clearest frame from the swipe goes to the AI once the item has left. A single stray frame never counts.
+
+**Double counting is prevented** by a "lock": after an item is scanned, it can't count again until it has left the camera's view.
 
 **Works offline.** TensorFlow.js, MobileNet, and MediaPipe are stored in `public/vendor/`. Only the AI fallback and ticket reading need internet.
 
@@ -140,10 +144,10 @@ public/
 
 | Setting | Default | Change it if… |
 |---|---|---|
-| `SCAN_CONFIDENCE` | 0.85 | Scans rarely trigger → lower to 0.75 (or enroll more frames) |
-| `HOLD_MS` | 300 | Items scan by accident → raise to 500–700 |
+| `SCAN_CONFIDENCE` | 0.65 | Wrong items get scanned → raise to 0.75–0.85 |
+| `SWIPE_MIN_FRAMES` | 2 | Items scan by accident → raise to 3–4 (careful "hold it up" style: 6) |
 | `AI_ENABLED` | true | Venue Wi-Fi is bad → `false` (unsure scans go to tap-confirm) |
-| `AI_LOW_CONFIDENCE` | 0.5 | Too many / too few AI checks |
+| `AI_LOW_CONFIDENCE` | 0.4 | Too many / too few AI checks |
 | `LOOKALIKE_GROUPS` | Coke/Diet Coke, Coffee/Iced Coffee/Latte | Add your own similar-looking items |
 | `THUMBS_UP_ENABLED` | true | Gestures cause trouble → `false` |
 
@@ -158,8 +162,10 @@ Lookalike groups only trigger an AI check when **two items from the same group a
 - **Lighting and background.** Recognition depends on conditions matching enrollment. Glare, dim light, or a changed background reduce accuracy. Re-enroll if the station's lighting changes; it takes about a minute per item.
 - **Network dependence for AI.** The AI fallback and ticket reading need internet and an OpenRouter key with credit. When they're slow (>5 s) or offline, PackPal falls back to tap-to-confirm. Core scanning stays offline.
 - **It verifies scans, not true bag contents.** PackPal confirms each item was *shown to the camera*, not that it went into the bag. An item scanned and then left on the counter would still count. It's a checklist enforcer, not a bag inspector.
-- **One item at a time.** Two identical items held up together count as one. Items must leave the frame between scans.
-- **Confidence comes in 10% steps.** KNN confidence is "votes out of 10", so a threshold of 0.85 effectively means 90%.
+- **Speed vs. accuracy.** Swipe mode accepts an item after just 2 frames at 70% confidence. That's fine for distinct items but can mix up similar ones. Raise `SCAN_CONFIDENCE` / `SWIPE_MIN_FRAMES` for a more careful mode.
+- **One item at a time.** Two identical items swiped together, or back-to-back with no gap, count as one. The camera needs to see a brief empty moment between them.
+- **Motion blur.** Very fast swipes in dim light produce blurry frames. Enroll by swiping, and keep the station well lit.
+- **Confidence comes in 10% steps.** KNN confidence is "votes out of 10", so a threshold of 0.65 effectively means 70%.
 - **Storage.** Enrolled items live in this browser's local storage (roughly 25 items × 25 frames). Clearing site data erases them, so use **Export backup**. They don't sync between devices.
 - **Camera access needs localhost or HTTPS.** A tablet connecting to the laptop over Wi-Fi can't use its camera without an HTTPS setup.
 - **Ticket photos from a webcam** are often too low-resolution for small print. Uploading a phone photo works better.

@@ -122,6 +122,9 @@ function isOrderScreenActive() {
   return !document.getElementById("main-screen").hidden && !isTicketScannerOpen();
 }
 
+let frameCount = 0;
+let lastThumbsUpScore = 0;
+
 async function cameraLoop() {
   try {
     if (isCameraReady() && !isCapturing) {
@@ -129,11 +132,15 @@ async function cameraLoop() {
       const scanning = isOrderScreenActive();
 
       // 1. Thumbs-up? (window.detectThumbsUp appears once MediaPipe has loaded)
-      let thumbsUpScore = 0;
+      //    Only every Nth frame, to leave more time for item recognition.
+      frameCount += 1;
       if (scanning && CONFIG.THUMBS_UP_ENABLED && window.detectThumbsUp) {
-        thumbsUpScore = window.detectThumbsUp(video);
-        handleThumbsUp(thumbsUpScore);
+        if (frameCount % CONFIG.THUMBS_UP_EVERY_N_FRAMES === 0) {
+          lastThumbsUpScore = window.detectThumbsUp(video);
+        }
+        handleThumbsUp(lastThumbsUpScore);
       }
+      const thumbsUpScore = lastThumbsUpScore;
 
       // 2. Which item is being held up?
       if (isRecognizerReady()) {
