@@ -127,6 +127,7 @@ function loadOrders(list) {
     items: order.items.map((item) => ({ name: item.name, qty: item.qty, scanned: 0 })),
   }));
   activeOrderId = orders.length > 0 ? orders[0].id : null;
+  checkHistory.length = 0; // fresh orders: nothing to undo
   saveOrders();
 }
 
@@ -187,14 +188,35 @@ function findItemByName(order, name) {
 
 // Check off ONE unit of an item. Returns true if it worked,
 // false if the item is already fully scanned.
+// Most recent check-offs (newest last), so a thumbs-down can undo the latest one.
+// Kept in memory only; after a reload, undo falls back to the last checked item.
+const checkHistory = [];
+
 function checkOffItem(order, itemIndex, source = "staff") {
   const item = order.items[itemIndex];
   if (order.status === "ready" || !item || item.scanned >= item.qty) return false;
   item.scanned += 1;
   item.lastSource = source;
   if (order.status === "waiting") order.status = "packing";
+  checkHistory.push({ orderId: order.id, itemIndex: itemIndex });
   saveOrders();
   return true;
+}
+
+// Undo the most recent check-off on this order. Returns the item's index,
+// or -1 if there was nothing to undo. Ready orders can't be changed.
+function undoLastCheck(order) {
+  for (let i = checkHistory.length - 1; i >= 0; i--) {
+    const entry = checkHistory[i];
+    if (entry.orderId !== order.id) continue;
+    checkHistory.splice(i, 1);
+    if (undoItem(order, entry.itemIndex)) return entry.itemIndex;
+  }
+  // No history (e.g. after a reload): undo the last item on the list that has a check.
+  for (let i = order.items.length - 1; i >= 0; i--) {
+    if (undoItem(order, i)) return i;
+  }
+  return -1;
 }
 
 // Undo ONE unit (in case of a mistake).

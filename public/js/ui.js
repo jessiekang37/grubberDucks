@@ -241,10 +241,11 @@ function hideConfirmPanel() {
   document.getElementById("confirm-panel").hidden = true;
 }
 
-// ---- Thumbs-up feedback ----
-// progress goes from 0 to 1 while a thumbs-up is held.
-function setThumbsUpProgress(progress) {
+// ---- Gesture feedback (👍 / 👎) ----
+// label = text to show; progress goes from 0 to 1 while the gesture is held.
+function setGestureProgress(label, progress) {
   const indicator = document.getElementById("thumbs-indicator");
+  if (label) document.getElementById("gesture-label").textContent = label;
   indicator.classList.toggle("visible", progress > 0);
   indicator.setAttribute("aria-hidden", String(progress <= 0));
   document.getElementById("thumbs-bar").style.width = Math.round(progress * 100) + "%";

@@ -19,11 +19,16 @@ function rankEmbedding(values, examples, settings) {
   }).filter((entry) => Number.isFinite(entry.similarity)).sort((a, b) => b.similarity - a.similarity);
   if (!ranked.length) return null;
   const best = ranked[0];
-  const margin = best.similarity - (ranked[1]?.similarity || 0);
+  const runnerUp = ranked[1];
+  const margin = best.similarity - (runnerUp?.similarity || 0);
+  // Being close to the empty area is normal for an item that fills part of the
+  // view; being close to another ITEM is a real risk, so it needs a bigger gap.
+  const vsBackground = runnerUp?.label === settings.BACKGROUND_LABEL || best.label === settings.BACKGROUND_LABEL;
+  const requiredMargin = vsBackground ? (settings.MIN_BACKGROUND_MARGIN ?? settings.MIN_CLASS_MARGIN) : settings.MIN_CLASS_MARGIN;
   const unknown = best.similarity < settings.MIN_SIMILARITY;
   // A match score, NOT a calibrated probability of correctness.
   const similarityScore = Math.max(0, Math.min(1, (best.similarity - 0.5) / 0.4));
-  const separationScore = Math.max(0, Math.min(1, margin / (settings.MIN_CLASS_MARGIN * 2)));
+  const separationScore = Math.max(0, Math.min(1, margin / (requiredMargin * 2)));
   const confidence = 0.7 * similarityScore + 0.3 * separationScore;
   const hasBackground = Boolean(examples[settings.BACKGROUND_LABEL]?.length >= settings.MIN_EXAMPLES);
   return {
@@ -31,10 +36,11 @@ function rankEmbedding(values, examples, settings) {
     nearestLabel: best.label, confidence, similarity: best.similarity, margin,
     alternatives: ranked.slice(0, 3),
     reliable: !unknown && hasBackground && best.count >= settings.MIN_EXAMPLES &&
-      margin >= settings.MIN_CLASS_MARGIN && confidence >= settings.SCAN_CONFIDENCE,
+      margin >= requiredMargin && confidence >= settings.SCAN_CONFIDENCE,
     reason: unknown ? "Unfamiliar view" : !hasBackground ? "Teach the empty area first" :
       best.count < settings.MIN_EXAMPLES ? "Needs more examples" :
-      margin < settings.MIN_CLASS_MARGIN ? "Similar matches — hold steady" : "",
+      margin < requiredMargin ? `Too close to ${runnerUp.label}` :
+      confidence < settings.SCAN_CONFIDENCE ? "Match too weak to count" : "",
   };
 }
 

@@ -31,6 +31,9 @@ function playSound(kind) {
       playTone(1320, 0.25, 0.24);
     } else if (kind === "error") {
       playTone(180, 0.3, 0, "square"); // low buzz
+    } else if (kind === "undo") {
+      playTone(660, 0.12); // falling two-note "bloop"
+      playTone(440, 0.18, 0.12);
     }
   } catch (err) {
     console.warn("Sound failed:", err);

@@ -28,6 +28,16 @@ test('near ties cannot automatically count, even with a high similarity', () => 
   assert.equal(result.reliable, false);
   assert.ok(result.margin < settings.MIN_CLASS_MARGIN);
 });
+test('an item narrowly ahead of the empty area still counts, but not one narrowly ahead of another item', () => {
+  // Coffee only slightly more similar than the empty table: OK (no other item to confuse it with).
+  const vsEmpty = rankEmbedding([1, .95, 0], { Coffee: rows([1, 1, 0]), Nothing: rows([.75, 1, 0]) }, settings);
+  assert.equal(vsEmpty.label, 'Coffee');
+  assert.ok(vsEmpty.margin < settings.MIN_CLASS_MARGIN && vsEmpty.margin >= settings.MIN_BACKGROUND_MARGIN);
+  assert.equal(vsEmpty.reliable, true);
+  // Same small gap, but the runner-up is another item: must not count.
+  const vsItem = rankEmbedding([1, .95, 0], { Coffee: rows([1, 1, 0]), Latte: rows([.75, 1, 0]), Nothing: rows([0, 0, 1]) }, settings);
+  assert.equal(vsItem.reliable, false);
+});
 test('an overrepresented class does not drown out a closer class', () => {
   const result = rankEmbedding([1, 0, 0], {
     Coffee: rows([1, 0, 0]), Muffin: rows([.75, .65, 0], 180), Nothing: rows([0, 0, 1]),
@@ -61,6 +71,18 @@ test('quantity, completion, undo, and completed-order immutability', () => {
   assert.equal(run('markOrderReady(order).ok'), true);
   assert.equal(run('undoItem(order, 1)'), false);
   assert.equal(run('checkOffItem(order, 1)'), false);
+});
+test('thumbs-down undo removes the most recent check-off, and never touches ready orders', () => {
+  const { run } = orderContext();
+  run('loadOrders([{number:"9",platform:"Other",customer:"",items:[{name:"Coffee",qty:2},{name:"Muffin",qty:1}]}]); var order = getActiveOrder();');
+  run('checkOffItem(order, 0); checkOffItem(order, 1); checkOffItem(order, 0);'); // Coffee, Muffin, Coffee
+  assert.equal(run('undoLastCheck(order)'), 0); // last was Coffee
+  assert.equal(run('undoLastCheck(order)'), 1); // then Muffin
+  assert.equal(run('order.items[0].scanned + "," + order.items[1].scanned'), '1,0');
+  run('checkOffItem(order, 0); checkOffItem(order, 1); markOrderReady(order)');
+  assert.equal(run('order.status'), 'ready');
+  assert.equal(run('undoLastCheck(order)'), -1);
+  assert.equal(run('countScanned(order)'), 3);
 });
 test('same-name ticket lines advance to the next unfilled modifier line', () => {
   const { run } = orderContext();
@@ -151,6 +173,13 @@ test('unreliable background frames cannot release a physical item lock', () => {
   frame('Nothing', 500, false); frame('Nothing', 1000, false);
   frame('Muffin', 1100); frame('Muffin', 1200); frame('Muffin', 1300);
   assert.equal(run('countScanned(getActiveOrder())'), 1);
+});
+test('a failed automatic AI check does not open a blocking panel', async () => {
+  const { run } = scannerContext();
+  run('askAiWhichItem = async () => { throw new Error("offline"); };');
+  await run('checkWithAi(getActiveOrder(), "Muffin", "test-image")');
+  assert.equal(run('confirmOrderId'), null);
+  assert.equal(run('aiChecksRunning'), 0);
 });
 test('late AI answers cannot count after manual intervention', async () => {
   const { run } = scannerContext();

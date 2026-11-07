@@ -68,7 +68,7 @@
               <div id="scan-notice" class="scan-notice"></div>
               <div id="ai-checking" class="ai-checking" aria-hidden="true"><span class="spinner"></span>Checking with AI…</div>
               <div id="thumbs-indicator" class="thumbs-indicator" aria-hidden="true">
-                <span>👍 Marking ready…</span>
+                <span id="gesture-label">👍 Marking ready…</span>
                 <div class="thumbs-track"><div id="thumbs-bar" class="thumbs-bar"></div></div>
               </div>
               <div class="hold-track"><div id="hold-bar" class="hold-bar"></div></div>
@@ -106,7 +106,8 @@
         <div class="eyebrow">A little practice goes a long way</div><h2>Meet your menu.</h2>
         <p class="enroll-help">
           Start with the empty packing area, then teach each item. After the countdown, swipe the item
-          across the camera a few times at real packing speed, from different sides, for about 5 seconds.
+          through the box a few times at real packing speed, from different sides, for about 5 seconds.
+          Do some swipes close to the camera and some farther away.
           We add lighting and framing variations automatically. Try a scan, then capture again if needed.
         </p>
 
@@ -204,7 +205,7 @@
   <script src="js/scanner.js"></script>
   <script src="js/ticket.js"></script>
   <script src="js/app.js"></script>
-  <!-- MediaPipe thumbs-up detection (a "module" script, loads after the rest) -->
+  <!-- MediaPipe 👍/👎 gesture detection (a "module" script, loads after the rest) -->
   <script type="module" src="js/gesture.js"></script>
 </body>
 </html>

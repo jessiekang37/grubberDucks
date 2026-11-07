@@ -92,7 +92,8 @@ function handlePrediction(result) {
   }
 
   const inCooldown = now - lastScanTime < CONFIG.SCAN_COOLDOWN_MS;
-  if (!order || inCooldown || lockedLabel || scannerPaused || aiChecksRunning || confirmOrderId) {
+  // (An open confirm panel does NOT pause scanning; a successful scan closes it.)
+  if (!order || inCooldown || lockedLabel || scannerPaused || aiChecksRunning) {
     resetHold();
     return;
   }
@@ -216,6 +217,12 @@ async function checkWithAi(order, cameraGuess, imageDataUrl) {
   } catch (err) {
     console.warn("AI check failed:", err.message);
     reason = err.name === "TimeoutError" ? "AI took too long." : "AI unavailable.";
+    // Automatic checks: don't block staff with a panel. They can just swipe again
+    // (the item stays locked until it leaves view, so this can't loop) or tap it.
+    if (cameraGuess && myGeneration === aiGeneration && getActiveOrder() === order) {
+      showScanNotice("Couldn't confirm. Swipe again or tap the item", "warn");
+      return;
+    }
   } finally {
     aiChecksRunning -= 1;
     showAiChecking(aiChecksRunning > 0);

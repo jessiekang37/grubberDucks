@@ -53,10 +53,18 @@ function addExampleFromVideo(videoEl, itemName) {
   light /= pixels.length / 16;
   if (light < 22 || light > 245) return false;
   const background = itemName !== CONFIG.BACKGROUND_LABEL ? getExampleCache()[CONFIG.BACKGROUND_LABEL] : null;
-  for (const [scale, exposure] of [[1, 1], [0.86, 0.85], [1, 1.15]]) {
-    const side = zone.size * scale; // zoom in slightly within the scan zone
+  // Each view is saved three ways so items work both close and far:
+  //   [1, 1]       as seen
+  //   [0.7, 0.9]   zoomed in (like holding it closer), slightly darker
+  //   [1.4, 1.1]   zoomed out (like holding it farther away), slightly brighter
+  const vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+  const centerX = zone.x + zone.size / 2, centerY = zone.y + zone.size / 2;
+  for (const [scale, exposure] of [[1, 1], [0.7, 0.9], [1.4, 1.1]]) {
+    const side = Math.min(zone.size * scale, vw, vh); // can't zoom out past the picture's edge
+    const x = Math.min(Math.max(centerX - side / 2, 0), vw - side);
+    const y = Math.min(Math.max(centerY - side / 2, 0), vh - side);
     ctx.filter = `brightness(${exposure})`;
-    ctx.drawImage(videoEl, zone.x + (zone.size - side) / 2, zone.y + (zone.size - side) / 2, side, side, 0, 0, 224, 224);
+    ctx.drawImage(videoEl, x, y, side, side, 0, 0, 224, 224);
     const embedding = featureModel.infer(trainingCanvas, true);
     try {
       if (scale === 1 && exposure === 1 && background) {

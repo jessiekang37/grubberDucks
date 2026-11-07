@@ -46,8 +46,12 @@ const CONFIG = {
   SCAN_CONFIDENCE: 0.65,
   // Below this similarity, a view counts as "unfamiliar" and is ignored.
   MIN_SIMILARITY: 0.65,
-  // How far ahead the best item must be of the runner-up.
+  // How far ahead the best item must be of the runner-up ITEM (e.g. Coke vs Diet Coke).
   MIN_CLASS_MARGIN: 0.03,
+  // How far ahead it must be when the runner-up is just the empty area ("Nothing").
+  // Smaller, because an item that only fills part of the box always looks a bit
+  // like the empty table, and there's no risk of confusing it with another item.
+  MIN_BACKGROUND_MARGIN: 0.01,
   NEIGHBORS_PER_CLASS: 3,
   MIN_EXAMPLES: 6,
   MAX_EXAMPLES_PER_CLASS: 180,
@@ -102,10 +106,13 @@ const CONFIG = {
   // The "tap to confirm" panel closes by itself after this long (ms).
   CONFIRM_AUTO_CLOSE_MS: 12000,
 
-  // ---- Thumbs-up to mark ready (MediaPipe) ----
-  // A thumbs-up presses "Mark ready". It goes through the same check as a tap,
+  // ---- Hand gestures (MediaPipe) ----
+  // 👍 presses "Mark ready". It goes through the same check as a tap,
   // so an order with missing items is still blocked.
+  // 👎 undoes the most recent check-off on the current order.
+  // The score / hold / cooldown settings below apply to both gestures.
   THUMBS_UP_ENABLED: true,
+  THUMBS_DOWN_ENABLED: true,
   THUMBS_UP_MIN_SCORE: 0.7,    // how sure MediaPipe must be that it's a thumbs-up (0 to 1)
   THUMBS_UP_HOLD_MS: 500,      // hold the thumbs-up this long
   THUMBS_UP_COOLDOWN_MS: 2000, // wait this long before another thumbs-up counts
