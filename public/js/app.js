@@ -4,6 +4,7 @@
 // ---- Tapping an order in the queue ----
 function onSelectOrder(orderId) {
   setActiveOrder(orderId);
+  resetScanner();
   hideMissingWarning();
   resetHold();
   cancelPendingAiChecks();
@@ -16,6 +17,9 @@ function onTapItem(itemIndex) {
   const order = getActiveOrder();
   if (!order) return;
   if (checkOffItem(order, itemIndex)) {
+    resetHold();
+    lockAfterScan(order.items[itemIndex].name, performance.now());
+    closeConfirm();
     cancelPendingAiChecks(); // a late AI answer must not count this item again
     hideMissingWarning();
     render();
@@ -27,6 +31,7 @@ function onUndoItem(itemIndex) {
   const order = getActiveOrder();
   if (!order) return;
   if (undoItem(order, itemIndex)) {
+    resetScanner();
     render();
   }
 }
@@ -47,6 +52,7 @@ function onMarkReady(byThumbsUp = false) {
   // Success: move on to the next order still in the queue.
   hideMissingWarning();
   closeConfirm();
+  resetScanner();
   showToast(`${byThumbsUp ? "👍 " : ""}Order #${order.number} ready for pickup`);
   const nextOrder = getQueueOrders()[0];
   setActiveOrder(nextOrder ? nextOrder.id : null);
@@ -55,12 +61,13 @@ function onMarkReady(byThumbsUp = false) {
 
 // ---- Demo mode toggle ----
 // On = pitch orders (with the forgotten drink). Off = regular mock orders.
-// Switching resets all orders.
+// Each mode keeps its own saved queue.
 function onToggleDemoMode() {
   const isDemo = document.getElementById("demo-toggle").checked;
-  loadOrders(isDemo ? DEMO_ORDERS : MOCK_ORDERS);
+  if (!restoreOrders(isDemo)) loadOrders(isDemo ? DEMO_ORDERS : MOCK_ORDERS);
   localStorage.setItem("packpal-demo-mode", isDemo ? "on" : "off");
   cancelPendingAiChecks();
+  resetScanner();
   closeConfirm();
   hideMissingWarning();
   render();
@@ -69,6 +76,8 @@ function onToggleDemoMode() {
 
 // ---- Switching between the orders screen and the enroll screen ----
 function onToggleEnrollScreen() {
+  if (isCapturing) return;
+  resetScanner();
   const enrollScreen = document.getElementById("enroll-screen");
   const mainScreen = document.getElementById("main-screen");
   const button = document.getElementById("enroll-toggle-btn");
@@ -76,7 +85,7 @@ function onToggleEnrollScreen() {
 
   enrollScreen.hidden = !goingToEnroll;
   mainScreen.hidden = goingToEnroll;
-  button.textContent = goingToEnroll ? "← Back to orders" : "Enroll items";
+  button.textContent = goingToEnroll ? "← Back to orders" : "Teach menu";
   moveCameraTo(goingToEnroll ? "enroll-camera-slot" : "main-camera-slot");
   if (goingToEnroll) renderEnrollScreen();
   else render(); // enrolled items may have changed
@@ -119,7 +128,7 @@ function handleThumbsUp(score) {
 
 // Only scan on the orders screen (not while enrolling or reading a ticket).
 function isOrderScreenActive() {
-  return !document.getElementById("main-screen").hidden && !isTicketScannerOpen();
+  return !document.getElementById("main-screen").hidden && !isTicketScannerOpen() && !scannerPaused;
 }
 
 let frameCount = 0;
@@ -130,11 +139,17 @@ async function cameraLoop() {
     if (isCameraReady() && !isCapturing) {
       const video = getCameraVideo();
       const scanning = isOrderScreenActive();
+      if (!scanning) {
+        lastThumbsUpScore = 0;
+        thumbsUpStart = null;
+        thumbsUpLastSeen = -Infinity;
+        setThumbsUpProgress(0);
+      }
 
       // 1. Thumbs-up? (window.detectThumbsUp appears once MediaPipe has loaded)
       //    Only every Nth frame, to leave more time for item recognition.
       frameCount += 1;
-      if (scanning && CONFIG.THUMBS_UP_ENABLED && window.detectThumbsUp) {
+      if (scanning && CONFIG.THUMBS_UP_ENABLED && !aiChecksRunning && !confirmOrderId && window.detectThumbsUp) {
         if (frameCount % CONFIG.THUMBS_UP_EVERY_N_FRAMES === 0) {
           lastThumbsUpScore = window.detectThumbsUp(video);
         }
@@ -144,16 +159,19 @@ async function cameraLoop() {
 
       // 2. Which item is being held up?
       if (isRecognizerReady()) {
+        const generation = aiGeneration;
         const result = await predictFromVideo(video);
         renderPrediction(result);
-        if (scanning) {
+        if (scanning && isOrderScreenActive() && generation === aiGeneration) {
           // A hand giving a thumbs-up isn't an item, so don't scan during it.
           if (thumbsUpScore >= CONFIG.THUMBS_UP_MIN_SCORE) resetHold();
           else handlePrediction(result);
         }
-        if (!result) setCameraStatus("No items enrolled yet. Tap \"Enroll items\".");
-        else if (!getEnrolledCounts()[CONFIG.BACKGROUND_LABEL]) setCameraStatus("Tip: enroll \"Nothing\" so an empty view isn't mistaken for an item.");
-        else setCameraStatus("");
+        if (!result) setCameraStatus("Teach your menu for automatic scans, check a photo with AI, or tap an item.");
+        else if (scannerPaused) setCameraStatus("Scanning paused. You can still check items by hand.");
+        else if (!getEnrolledCounts()[CONFIG.BACKGROUND_LABEL]) setCameraStatus("Teach the empty area to enable automatic scans.");
+        else if (lockedLabel) setCameraStatus("Move the item away. Show the empty area briefly before the next item.");
+        else setCameraStatus(result.reason || "Show one item at a time. Hold briefly, then move it away.");
       }
     }
   } catch (err) {
@@ -165,24 +183,26 @@ async function cameraLoop() {
 // Camera and models load in the background. If anything fails, the app still
 // works with tap-to-check-off and the Mark ready button.
 async function startCameraAndRecognizer() {
+  // Loading training must still work when camera access is denied.
+  const modelLoading = loadRecognizer().then(() => {
+    render();
+    if (!document.getElementById("enroll-screen").hidden) renderEnrollScreen();
+  }).catch((err) => {
+    console.error(err);
+    setCameraStatus("Recognition failed to load. Tap items to check them off.");
+  });
   try {
     setCameraStatus("Starting camera…");
     await startCamera();
   } catch (err) {
     console.error(err);
     setCameraStatus("Camera unavailable. Tap items to check them off.");
+    await modelLoading;
     return;
   }
   cameraLoop(); // thumbs-up can work even before the item model finishes loading
-  try {
-    setCameraStatus("Loading recognition model…");
-    await loadRecognizer();
-    setCameraStatus("");
-    render(); // redraw so "tap only" tags reflect what's enrolled
-  } catch (err) {
-    console.error(err);
-    setCameraStatus("Recognition failed to load. Tap items to check them off.");
-  }
+  if (!isRecognizerReady()) setCameraStatus("Loading recognition model…");
+  await modelLoading;
 }
 
 // ---- Start-up ----
@@ -190,9 +210,18 @@ function start() {
   // Remember whether demo mode was on last time.
   const isDemo = localStorage.getItem("packpal-demo-mode") === "on";
   document.getElementById("demo-toggle").checked = isDemo;
-  loadOrders(isDemo ? DEMO_ORDERS : MOCK_ORDERS);
+  if (!restoreOrders(isDemo)) loadOrders(isDemo ? DEMO_ORDERS : MOCK_ORDERS);
   render();
+  loadAiStatus();
   startCameraAndRecognizer();
+}
+
+function onResetOrders() {
+  if (!confirm("Start a fresh sample queue? This replaces saved order progress in the current mode.")) return;
+  resetScanner();
+  loadOrders(document.getElementById("demo-toggle").checked ? DEMO_ORDERS : MOCK_ORDERS);
+  hideMissingWarning();
+  render();
 }
 
 start();

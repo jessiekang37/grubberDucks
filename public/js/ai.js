@@ -3,6 +3,16 @@
 // The API key lives only on the server; the browser never sees it.
 
 // Turn a frame into a small JPEG image (as text the server can send on).
+let aiAvailable = false;
+async function loadAiStatus() {
+  try {
+    const response = await fetch("/api/status", { signal: AbortSignal.timeout(3000) });
+    aiAvailable = response.ok && (await response.json()).aiEnabled;
+  } catch { aiAvailable = false; }
+  const button = document.getElementById("ai-photo-btn");
+  button.disabled = !aiAvailable || scannerPaused || !getActiveOrder();
+  document.getElementById("ai-status").textContent = aiAvailable ? "AI photo checks available" : "Local scanning · AI not connected";
+}
 // source = the live camera (default) or a saved frame on a canvas.
 function captureFrameAsJpeg(maxWidth = 512, quality = 0.8, source = getCameraVideo()) {
   const sourceWidth = source.videoWidth || source.width;

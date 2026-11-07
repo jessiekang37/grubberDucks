@@ -1,22 +1,7 @@
-// scanner.js
-// Decides when camera recognitions count as a real "scan".
-// Built for SWIPING items quickly across the camera (holding still works too).
-//
-// Rules:
-//  1. Each item passing the camera becomes a "candidate". We count how many
-//     frames recognized it, and keep its clearest frame.
-//  2. If SWIPE_MIN_FRAMES frames were confident (>= SCAN_CONFIDENCE), check it
-//     off right away. (Lookalikes like Coke vs Diet Coke go to the AI instead.)
-//  3. If it was only ever "unsure" (between AI_LOW_CONFIDENCE and SCAN_CONFIDENCE),
-//     then once it leaves the view, send its clearest frame to the AI.
-//     AI unsure / fails / too slow -> ask staff to tap-confirm.
-//     The AI check runs in the background: staff can keep scanning.
-//  4. After a scan, that item is "locked" until it leaves the camera's view.
-//     This stops one item counting twice.
-//
-// SAFETY: the AI and the camera can only CHECK OFF items. Neither can mark an
-// order ready. Only the "Mark ready" button does that, using markOrderReady()
-// in orders.js, which always requires every item to be scanned.
+// Stable visual matches check off one unit. A reliably empty view releases
+// the physical-item lock; label flicker does not. AI checks are serialized,
+// and invalidated when the order, screen, or manual confirmation changes.
+// Only markOrderReady() can complete an order.
 
 let candidate = null;      // item currently passing the camera (see startCandidate)
 let lockedLabel = null;    // item just scanned, waiting to leave view
@@ -26,6 +11,33 @@ let aiChecksRunning = 0;   // how many AI checks are waiting for an answer
 let aiGeneration = 0;      // goes up to cancel AI answers that arrive too late
 let confirmOrderId = null; // set while the "tap to confirm" panel is open
 let confirmTimer = null;
+let scannerPaused = false;
+let emptySince = null;
+
+function resetScanner() {
+  resetHold();
+  cancelPendingAiChecks();
+  closeConfirm();
+  // Keep the physical item lock across order changes and pauses.
+  emptySince = null;
+}
+
+function onToggleScanning() {
+  scannerPaused = !scannerPaused;
+  resetScanner();
+  document.getElementById("pause-scan-btn").textContent = scannerPaused ? "Resume scanning" : "Pause scanning";
+  document.getElementById("pause-scan-btn").setAttribute("aria-pressed", String(scannerPaused));
+  renderStation();
+}
+
+// Explicit photo check works even for an item that has never been enrolled.
+function onCheckWithAi() {
+  const order = getActiveOrder();
+  if (!isOrderScreenActive() || !order || aiChecksRunning || confirmOrderId) return;
+  if (!isCameraReady()) { showToast("Camera isn't ready. Tap an item to confirm it by hand."); return; }
+  lockAfterScan("manual-photo", performance.now());
+  checkWithAi(order, "", captureFrameAsJpeg(768, 0.85));
+}
 
 // Where we keep a copy of the candidate's clearest frame (for the AI).
 const bestFrameCanvas = document.createElement("canvas");
@@ -42,12 +54,9 @@ function getLookalikesOf(label) {
   return group ? group.filter((name) => name.toLowerCase() !== wanted) : [];
 }
 
-// Could the camera be mixing this item up with a lookalike?
-// Only if one of its lookalikes is ALSO enrolled. If "Diet Coke" was never
-// enrolled, the camera can't confuse "Coke" with it, so no AI check is needed.
+// Hidden differences require confirmation even when only one variant is taught.
 function isLookalike(label) {
-  const enrolledNames = Object.keys(getEnrolledCounts()).map((name) => name.toLowerCase());
-  return getLookalikesOf(label).some((name) => enrolledNames.includes(name.toLowerCase()));
+  return getLookalikesOf(label).length > 0;
 }
 
 // Copy the current camera frame, so the AI can see it even after the item has moved on.
@@ -72,12 +81,16 @@ function handlePrediction(result) {
 
   // Step 1: unlock the last scanned item once it has been out of view long enough.
   if (lockedLabel) {
-    if (topLabel === lockedLabel) lockedLastSeen = now;
-    else if (now - lockedLastSeen > CONFIG.RELEASE_MS) lockedLabel = null;
+    // A label changing is not proof that the previous physical item left.
+    // Require a confidently empty area before another automatic count.
+    if (topLabel === CONFIG.BACKGROUND_LABEL && result.reliable) {
+      if (emptySince === null) emptySince = now;
+      if (now - emptySince >= CONFIG.RELEASE_MS) { lockedLabel = null; emptySince = null; }
+    } else emptySince = null;
   }
 
   const inCooldown = now - lastScanTime < CONFIG.SCAN_COOLDOWN_MS;
-  if (!order || inCooldown) {
+  if (!order || inCooldown || lockedLabel || scannerPaused || aiChecksRunning || confirmOrderId) {
     resetHold();
     return;
   }
@@ -86,6 +99,7 @@ function handlePrediction(result) {
   const seesItem =
     result &&
     topLabel !== CONFIG.BACKGROUND_LABEL &&
+    topLabel !== CONFIG.UNKNOWN_LABEL &&
     topLabel !== lockedLabel &&
     result.confidence >= CONFIG.AI_LOW_CONFIDENCE;
 
@@ -96,13 +110,14 @@ function handlePrediction(result) {
   }
 
   // A different item appeared: wrap up the old one first.
-  if (candidate && candidate.label !== topLabel) finishUnsureCandidate(order, now);
+  if (candidate && candidate.label !== topLabel) resetHold();
   if (!candidate) startCandidate(topLabel, now);
 
   // Step 3: add this frame to the candidate's tally.
   candidate.lastSeen = now;
   candidate.frames += 1;
-  if (result.confidence >= CONFIG.SCAN_CONFIDENCE) candidate.confidentFrames += 1;
+  if (result.reliable) candidate.confidentFrames += 1;
+  else candidate.confidentFrames = 0;
   if (result.confidence > candidate.bestConfidence) {
     candidate.bestConfidence = result.confidence;
     saveBestFrame();
@@ -110,7 +125,7 @@ function handlePrediction(result) {
   setHoldProgress(Math.min(candidate.confidentFrames / CONFIG.SWIPE_MIN_FRAMES, 1));
 
   // Step 4: enough confident frames? Count it now (or ask the AI if it's a lookalike).
-  if (candidate.confidentFrames >= CONFIG.SWIPE_MIN_FRAMES) {
+  if (candidate.confidentFrames >= CONFIG.SWIPE_MIN_FRAMES && now - candidate.firstSeen >= CONFIG.SCAN_MIN_DURATION_MS) {
     const label = candidate.label;
     lockAfterScan(label, now);
     if (isLookalike(label)) checkWithAi(order, label, captureFrameAsJpeg(512, 0.8, bestFrameCanvas));
@@ -136,6 +151,7 @@ function lockAfterScan(label, now) {
   lockedLabel = label;
   lockedLastSeen = now;
   lastScanTime = now;
+  emptySince = null;
   resetHold();
 }
 
@@ -150,14 +166,15 @@ function onItemScanned(order, label, source) {
     return;
   }
 
-  if (item.scanned >= item.qty) {
+  if (item.scanned >= item.qty || order.status === "ready") {
     showScanNotice(`All ${item.name} already scanned`, "warn");
     playSound("error");
     return;
   }
 
   // Check off ONE unit. (This never marks the order ready.)
-  checkOffItem(order, order.items.indexOf(item));
+  if (!checkOffItem(order, order.items.indexOf(item), source)) return;
+  closeConfirm();
   hideMissingWarning();
   render();
   flashChecklistItem(order.items.indexOf(item));
@@ -176,6 +193,7 @@ function cancelPendingAiChecks() {
 
 // imageDataUrl = the frame to show the AI (the clearest one from the swipe).
 async function checkWithAi(order, cameraGuess, imageDataUrl) {
+  if (aiChecksRunning) return;
   const myGeneration = aiGeneration;
   aiChecksRunning += 1;
   showAiChecking(true);
@@ -238,6 +256,12 @@ function onConfirmChoice(itemIndex) {
   const order = getOrder(confirmOrderId);
   closeConfirm();
   if (order && order === getActiveOrder()) {
-    onItemScanned(order, order.items[itemIndex].name, "staff");
+    cancelPendingAiChecks();
+    if (checkOffItem(order, itemIndex, "staff")) {
+      hideMissingWarning();
+      render();
+      showScanNotice(`✓ ${order.items[itemIndex].name} confirmed`, "success");
+      playSound("success");
+    }
   }
 }

@@ -1,13 +1,6 @@
-// recognizer.js
-// The "brain" that learns and recognizes items. Two pieces:
-//
-// 1. MobileNet (pretrained by Google) looks at a camera frame and turns it into
-//    a list of 1,280 numbers that describe what it looks like (its "embedding").
-//    Similar-looking things get similar numbers.
-//
-// 2. A KNN classifier stores the embeddings of frames you enrolled, each tagged
-//    with an item name. To recognize a new frame, it finds the most similar
-//    stored frames and lets them vote. No training step needed.
+// MobileNet embeddings with class-balanced nearest-neighbor matching.
+// The vendored classifier stores tensors and keeps legacy backups compatible;
+// matching.js supplies absolute similarity, separation, and unknown rejection.
 
 let featureModel = null; // MobileNet
 let classifier = null;   // KNN
@@ -31,30 +24,85 @@ function hasEnrolledItems() {
   return classifier !== null && classifier.getNumClasses() > 0;
 }
 
-// Take the current camera frame and store it as an example of `itemName`.
-function addExampleFromVideo(videoEl, itemName) {
-  const embedding = featureModel.infer(videoEl, true); // true = give us the embedding
-  classifier.addExample(embedding, itemName);
-  embedding.dispose(); // free memory (the classifier keeps its own copy)
+// Cache normalized examples once after enrollment, not on every camera frame.
+let exampleCache = null;
+const trainingCanvas = document.createElement("canvas");
+trainingCanvas.width = trainingCanvas.height = 224;
+
+function getExampleCache() {
+  if (exampleCache) return exampleCache;
+  exampleCache = Object.create(null);
+  for (const [name, tensor] of Object.entries(classifier.getClassifierDataset())) {
+    const data = tensor.dataSync();
+    exampleCache[name] = Array.from({ length: tensor.shape[0] }, (_, i) =>
+      normalizeEmbedding(data.subarray(i * tensor.shape[1], (i + 1) * tensor.shape[1])));
+  }
+  return exampleCache;
 }
 
-// What's in front of the camera right now?
-// Returns { label: "Coffee", confidence: 0.9 } or null if nothing is enrolled.
+// Keep original framing for compatibility with existing backups. Add mild zoom
+// and exposure variations so enrollment need not match scanning exactly.
+function addExampleFromVideo(videoEl, itemName) {
+  const ctx = trainingCanvas.getContext("2d", { willReadFrequently: true });
+  ctx.filter = "none";
+  ctx.drawImage(videoEl, 0, 0, 224, 224);
+  const pixels = ctx.getImageData(0, 0, 224, 224).data;
+  let light = 0;
+  for (let i = 0; i < pixels.length; i += 16) light += (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+  light /= pixels.length / 16;
+  if (light < 22 || light > 245) return false;
+  const background = itemName !== CONFIG.BACKGROUND_LABEL ? getExampleCache()[CONFIG.BACKGROUND_LABEL] : null;
+  for (const [scale, exposure] of [[1, 1], [0.86, 0.85], [1, 1.15]]) {
+    const w = videoEl.videoWidth, h = videoEl.videoHeight;
+    ctx.filter = `brightness(${exposure})`;
+    ctx.drawImage(videoEl, w * (1 - scale) / 2, h * (1 - scale) / 2, w * scale, h * scale, 0, 0, 224, 224);
+    const embedding = featureModel.infer(trainingCanvas, true);
+    try {
+      if (scale === 1 && exposure === 1 && background) {
+        const values = normalizeEmbedding(embedding.dataSync());
+        const looksEmpty = background.some((row) => {
+          let similarity = 0;
+          for (let i = 0; i < row.length; i++) similarity += row[i] * values[i];
+          return similarity > 0.97;
+        });
+        if (looksEmpty) return false;
+      }
+      classifier.addExample(embedding, itemName);
+    }
+    finally { embedding.dispose(); }
+  }
+  ctx.filter = "none";
+  exampleCache = null;
+  return true;
+}
+
+function trimExamples(itemName) {
+  const dataset = classifier.getClassifierDataset();
+  const tensor = dataset[itemName];
+  if (tensor.shape[0] <= CONFIG.MAX_EXAMPLES_PER_CLASS) return;
+  const trimmed = tensor.slice([tensor.shape[0] - CONFIG.MAX_EXAMPLES_PER_CLASS, 0], [CONFIG.MAX_EXAMPLES_PER_CLASS, tensor.shape[1]]);
+  dataset[itemName] = trimmed;
+  classifier.setClassifierDataset(dataset);
+  tensor.dispose();
+  exampleCache = null;
+}
+
 async function predictFromVideo(videoEl) {
   if (!hasEnrolledItems()) return null;
   const embedding = featureModel.infer(videoEl, true);
-  const result = await classifier.predictClass(embedding, CONFIG.KNN_K);
-  embedding.dispose();
-  return { label: result.label, confidence: result.confidences[result.label] };
+  try { return rankEmbedding(await embedding.data(), getExampleCache(), CONFIG); }
+  finally { embedding.dispose(); }
 }
 
 function deleteItem(itemName) {
   classifier.clearClass(itemName);
+  exampleCache = null;
   saveItems();
 }
 
 function deleteAllItems() {
   classifier.clearAllClasses();
+  exampleCache = null;
   saveItems();
 }
 
@@ -84,7 +132,16 @@ function base64ToFloats(text, halfPrecision) {
   const binary = atob(text);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  if (halfPrecision) return Float32Array.from(new Float16Array(bytes.buffer));
+  if (halfPrecision) {
+    // Decode IEEE float16 even on browsers without Float16Array.
+    const words = new Uint16Array(bytes.buffer);
+    return Float32Array.from(words, (word) => {
+      const sign = word & 0x8000 ? -1 : 1;
+      const exponent = (word >> 10) & 31, fraction = word & 1023;
+      return sign * (exponent === 0 ? fraction * 2 ** -24 :
+        exponent === 31 ? (fraction ? NaN : Infinity) : (1 + fraction / 1024) * 2 ** (exponent - 15));
+    });
+  }
   return new Float32Array(bytes.buffer);
 }
 
@@ -102,14 +159,31 @@ function exportItemsAsText() {
 
 // Load items from a text string made by exportItemsAsText().
 function importItemsFromText(text) {
+  if (text.length > 15000000) throw new Error("Backup too large");
   const saved = JSON.parse(text);
-  const dataset = {};
-  for (const itemName in saved) {
-    const item = saved[itemName];
-    dataset[itemName] = tf.tensor2d(base64ToFloats(item.data, item.half), item.shape);
+  if (!saved || Array.isArray(saved) || typeof saved !== "object" || Object.keys(saved).length > 100) throw new Error("Invalid backup");
+  const dataset = Object.create(null);
+  const names = new Set();
+  try {
+    for (const [itemName, item] of Object.entries(saved)) {
+      if (!itemName.trim() || itemName.length > 79 || Object.hasOwn(Object.prototype, itemName) || ["prototype", CONFIG.UNKNOWN_LABEL].includes(itemName) ||
+          names.has(itemName.toLowerCase()) || !item || !Array.isArray(item.shape) || item.shape.length !== 2 ||
+          !Number.isInteger(item.shape[0]) || item.shape[0] < 1 || item.shape[0] > 3000 || item.shape[1] !== 1280 ||
+          typeof item.data !== "string") throw new Error("Invalid item in backup");
+      names.add(itemName.toLowerCase());
+      const numbers = base64ToFloats(item.data, item.half);
+      if (numbers.length !== item.shape[0] * 1280 || !numbers.every(Number.isFinite)) throw new Error("Invalid features");
+      for (let i = 0; i < numbers.length; i += 1280) normalizeEmbedding(numbers.subarray(i, i + 1280));
+      dataset[itemName] = tf.tensor2d(numbers, item.shape);
+    }
+  } catch (err) {
+    Object.values(dataset).forEach((tensor) => tensor.dispose());
+    throw err;
   }
+  // Validate the complete backup before replacing any existing training.
   classifier.clearAllClasses();
   classifier.setClassifierDataset(dataset);
+  exampleCache = null;
 }
 
 // Returns true if saved OK. Can fail if the browser storage is full.

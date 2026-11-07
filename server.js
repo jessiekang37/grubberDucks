@@ -1,4 +1,4 @@
-// PackPal local server
+// Pack’em local server
 // Job 1: serve the files in /public so the browser can load the app.
 // Job 2 (Milestone 4): provide /api/vision so the OpenRouter key stays secret.
 //
@@ -37,12 +37,14 @@ const CONTENT_TYPES = {
 
 function serveStaticFile(req, res) {
   // "/" means the main page.
-  let urlPath = decodeURIComponent(req.url.split("?")[0]);
+  let urlPath;
+  try { urlPath = decodeURIComponent(req.url.split("?")[0]); }
+  catch { res.writeHead(400); res.end("Invalid URL"); return; }
   if (urlPath === "/") urlPath = "/index.html";
 
   // Build the file path and make sure it stays inside /public (security).
   const filePath = path.normalize(path.join(PUBLIC_DIR, urlPath));
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  if (!filePath.startsWith(PUBLIC_DIR + path.sep)) {
     res.writeHead(403);
     res.end("Forbidden");
     return;
@@ -111,7 +113,7 @@ async function askVisionModel(prompt, imageDataUrl, maxTokens = 1000) {
     headers: {
       Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",
-      "X-Title": "PackPal",
+      "X-Title": "Pack'em",
     },
     body: JSON.stringify({
       model: process.env.OPENROUTER_MODEL || "anthropic/claude-haiku-5.5",
@@ -161,7 +163,7 @@ async function handleVisionRequest(req, res) {
   }
 
   // Check the input is what we expect.
-  const { image, itemNames } = body;
+  const { image, itemNames } = body || {};
   const validImage = typeof image === "string" && image.startsWith("data:image/");
   const validNames =
     Array.isArray(itemNames) &&
@@ -215,9 +217,9 @@ async function handleTicketRequest(req, res) {
     return;
   }
 
-  const { image } = body;
+  const { image } = body || {};
   // Menu item names the app already knows, so "LG HOT COFFEE" can become "Coffee".
-  const knownNames = Array.isArray(body.knownNames)
+  const knownNames = Array.isArray(body?.knownNames)
     ? body.knownNames.filter((n) => typeof n === "string" && n.length > 0 && n.length < 80).slice(0, 100)
     : [];
   if (typeof image !== "string" || !image.startsWith("data:image/")) {
@@ -272,6 +274,10 @@ async function handleTicketRequest(req, res) {
 }
 
 const server = http.createServer((req, res) => {
+  if (req.method === "GET" && req.url === "/api/status") {
+    sendJson(res, 200, { aiEnabled: hasApiKey() });
+    return;
+  }
   if (req.method === "POST" && req.url === "/api/vision") {
     handleVisionRequest(req, res);
     return;
@@ -284,5 +290,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`PackPal running at http://localhost:${PORT}`);
+  console.log(`Pack’em running at http://localhost:${PORT}`);
 });

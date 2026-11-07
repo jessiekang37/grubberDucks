@@ -8,10 +8,10 @@ const CONFIG = {
 
   // How many frames to grab each time you press "Capture" on the enroll screen.
   // More frames = more accurate, but uses more browser storage.
-  FRAMES_PER_CAPTURE: 60,
+  FRAMES_PER_CAPTURE: 24,
 
-  // Milliseconds between captured frames. 60 frames × 100ms ≈ 6 seconds.
-  CAPTURE_INTERVAL_MS: 100,
+  // Pause between views. Each view adds three lighting/framing variations.
+  CAPTURE_INTERVAL_MS: 180,
 
   // Seconds of "get ready" countdown before capturing starts, so the first
   // frames aren't of your hand coming back from the button.
@@ -20,10 +20,6 @@ const CONFIG = {
   // Pause between recognition attempts (milliseconds). Small = fast scanning.
   // The real speed is limited by how fast the laptop runs the model (~20-30 per second).
   PREDICT_INTERVAL_MS: 30,
-
-  // KNN "k": how many of the closest enrolled examples get a vote.
-  // Confidence = share of those votes the winning item got (e.g. 9 of 10 = 0.9).
-  KNN_K: 10,
 
   // Special item name for "nothing is being held up". Enroll this first,
   // pointing the camera at the empty packing area.
@@ -38,13 +34,19 @@ const CONFIG = {
   //   SCAN_CONFIDENCE: 0.85, SWIPE_MIN_FRAMES: 6
 
   // How sure the camera must be for a frame to count as "confident" (0 to 1).
-  // Note: with KNN_K = 10, confidence moves in steps of 0.1, so 0.65 means "at least 70%".
-  SCAN_CONFIDENCE: 0.65,
+  // This is a heuristic match score, not a probability of correctness.
+  SCAN_CONFIDENCE: 0.78,
+  MIN_SIMILARITY: 0.72,
+  MIN_CLASS_MARGIN: 0.045,
+  NEIGHBORS_PER_CLASS: 3,
+  MIN_EXAMPLES: 6,
+  MAX_EXAMPLES_PER_CLASS: 180,
+  UNKNOWN_LABEL: "__unknown__",
+  SCAN_MIN_DURATION_MS: 180,
 
   // How many confident frames are needed to check an item off.
-  // A swipe across the camera gives roughly 5-10 frames. Raise to 3-4 if
-  // items get scanned by accident.
-  SWIPE_MIN_FRAMES: 2,
+  // Also require SCAN_MIN_DURATION_MS of evidence.
+  SWIPE_MIN_FRAMES: 3,
 
   // How long (ms) with no sighting before we decide an item has left the view.
   SWIPE_GAP_MS: 150,
@@ -55,9 +57,9 @@ const CONFIG = {
   // After any scan, wait this long (ms) before another scan can happen.
   SCAN_COOLDOWN_MS: 200,
 
-  // A scanned item can't count again until it has been OUT of view this long (ms).
+  // A scanned item stays locked until a reliable EMPTY view lasts this long.
   // This is what stops one Coffee from being counted twice.
-  RELEASE_MS: 250,
+  RELEASE_MS: 400,
 
   // How long the "✓ Coffee 1/2" or "not on this order" message stays up (ms).
   SCAN_NOTICE_MS: 1800,
@@ -75,11 +77,8 @@ const CONFIG = {
   // Scanning keeps going while the AI thinks, so this doesn't slow staff down.
   AI_TIMEOUT_MS: 5000,
 
-  // Groups of items that look alike. If the camera sees one of these AND another
-  // item from the same group is also enrolled, we always double-check with the
-  // AI, even if the camera is confident. (If only "Coffee" is enrolled, Coffee
-  // scans stay instant and work offline.)
-  // Names must match enrolled item names (upper/lower case doesn't matter).
+  // Known lookalikes always need AI or staff confirmation, even if only one
+  // is enrolled: lack of training for the other does not make them distinct.
   LOOKALIKE_GROUPS: [
     ["Coke", "Diet Coke"],
     ["Coffee", "Iced Coffee", "Latte"],

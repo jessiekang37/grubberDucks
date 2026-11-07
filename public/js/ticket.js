@@ -10,6 +10,7 @@ function isTicketScannerOpen() {
 }
 
 function onOpenTicketScanner() {
+  resetScanner();
   pendingTicket = null;
   document.getElementById("ticket-modal").hidden = false;
   moveCameraTo("ticket-camera-slot");
@@ -18,6 +19,7 @@ function onOpenTicketScanner() {
 }
 
 function onCloseTicketScanner() {
+  ticketGeneration++;
   document.getElementById("ticket-modal").hidden = true;
   moveCameraTo("main-camera-slot");
   setCameraHighRes(false);
@@ -63,6 +65,7 @@ function onUploadTicketPhoto(fileInput) {
 
 // ---- Sending it to the AI ----
 async function readTicket(imageDataUrl) {
+  const generation = ++ticketGeneration;
   document.getElementById("ticket-photo").src = imageDataUrl;
   showTicketStep("reading");
 
@@ -73,7 +76,7 @@ async function readTicket(imageDataUrl) {
 
   try {
     const ticket = await askAiToReadTicket(imageDataUrl, knownNames);
-    if (!isTicketScannerOpen()) return; // staff closed the window while waiting
+    if (!isTicketScannerOpen() || generation !== ticketGeneration) return;
     if (ticket.items.length === 0) {
       showTicketStep("error", "Couldn't find any items on that ticket. Try again with the ticket flat, close, and well lit.");
       return;
@@ -82,6 +85,7 @@ async function readTicket(imageDataUrl) {
     renderTicketReview();
     showTicketStep("review");
   } catch (err) {
+    if (!isTicketScannerOpen() || generation !== ticketGeneration) return;
     console.error("Ticket reading failed:", err);
     const message =
       err.name === "TimeoutError"
@@ -95,26 +99,20 @@ async function readTicket(imageDataUrl) {
 function renderTicketReview() {
   const t = pendingTicket;
   document.getElementById("ticket-summary").innerHTML = `
-    <span class="order-number">#${escapeHtml(t.orderNumber || "new")}</span>
-    <span class="platform-tag ${platformClass(t.platform)}">${escapeHtml(t.platform)}</span>
-    <span class="customer">${escapeHtml(t.customer)}</span>`;
-
-  document.getElementById("ticket-items").innerHTML = t.items
-    .map(
-      (item, index) => `
-      <div class="ticket-item">
-        <div class="ticket-item-name">
-          ${escapeHtml(item.name)}
-          ${item.note ? `<span class="item-note">${escapeHtml(item.note)}</span>` : ""}
-        </div>
-        <button class="qty-btn" onclick="onChangeTicketQty(${index}, -1)" aria-label="One less">−</button>
-        <span class="ticket-qty">${item.qty}</span>
-        <button class="qty-btn" onclick="onChangeTicketQty(${index}, 1)" aria-label="One more">+</button>
-      </div>`
-    )
-    .join("");
-
-  document.getElementById("add-ticket-btn").disabled = t.items.length === 0;
+    <label>Order number<input class="review-input" value="${escapeHtml(t.orderNumber || "")}" maxlength="20" oninput="pendingTicket.orderNumber = this.value"></label>
+    <label>Customer<input class="review-input" value="${escapeHtml(t.customer || "")}" maxlength="60" oninput="pendingTicket.customer = this.value"></label>
+    <label>Platform<select class="review-input" onchange="pendingTicket.platform = this.value">${["DoorDash", "Uber Eats", "Grubhub", "Other"].map((name) => `<option ${t.platform === name ? "selected" : ""}>${name}</option>`).join("")}</select></label>`;
+  document.getElementById("ticket-items").innerHTML = t.items.map((item, index) => `
+    <div class="ticket-item">
+      <div class="ticket-item-name">
+        <input class="review-input" aria-label="Item ${index + 1} name" placeholder="Item name" maxlength="79" value="${escapeHtml(item.name)}" oninput="pendingTicket.items[${index}].name = this.value; validateTicket()">
+        <input class="review-input note-input" aria-label="Item ${index + 1} notes" placeholder="Notes, e.g. oat milk" maxlength="100" value="${escapeHtml(item.note || "")}" oninput="pendingTicket.items[${index}].note = this.value">
+      </div>
+      <button class="qty-btn" onclick="onChangeTicketQty(${index}, -1)" aria-label="One less">−</button>
+      <span class="ticket-qty">${item.qty}</span>
+      <button class="qty-btn" onclick="onChangeTicketQty(${index}, 1)" aria-label="One more">+</button>
+    </div>`).join("");
+  validateTicket();
 }
 
 // Quantity 0 removes the item.
@@ -126,7 +124,8 @@ function onChangeTicketQty(index, change) {
 }
 
 function onAddTicketOrder() {
-  if (!pendingTicket || pendingTicket.items.length === 0) return;
+  if (!pendingTicket || !pendingTicket.items.length || pendingTicket.items.some((item) => !item.name.trim())) return;
+  pendingTicket.items.forEach((item) => { item.name = item.name.trim(); });
   const newOrder = addOrder({
     number: pendingTicket.orderNumber || "T" + Math.floor(100 + Math.random() * 900),
     platform: pendingTicket.platform,
@@ -138,4 +137,23 @@ function onAddTicketOrder() {
   hideMissingWarning();
   render();
   showToast(`Order #${newOrder.number} added`);
+}
+
+let ticketGeneration = 0;
+
+function validateTicket() {
+  document.getElementById("add-ticket-btn").disabled = !pendingTicket.items.length || pendingTicket.items.some((item) => !item.name.trim());
+}
+
+function onManualOrder() {
+  ticketGeneration++;
+  pendingTicket = { orderNumber: "", customer: "", platform: "Other", items: [{ name: "", qty: 1, note: "" }] };
+  renderTicketReview();
+  showTicketStep("review");
+}
+
+function onAddTicketLine() {
+  if (!pendingTicket || pendingTicket.items.length >= 30) return;
+  pendingTicket.items.push({ name: "", qty: 1, note: "" });
+  renderTicketReview();
 }

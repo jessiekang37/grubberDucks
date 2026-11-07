@@ -1,5 +1,5 @@
 // enroll.js
-// The "Enroll items" screen: this is how a restaurant teaches PackPal its menu.
+// The "Enroll items" screen: this is how a restaurant teaches Pack’em its menu.
 // Staff type an item name, hold the item up, and capture ~25 frames of it.
 
 let isCapturing = false; // true while frames are being grabbed
@@ -28,7 +28,7 @@ function renderEnrollScreen() {
     .map((name) => {
       const count = counts[name] || 0;
       const label = name === CONFIG.BACKGROUND_LABEL ? "Nothing (empty area)" : name;
-      return `<button class="chip ${count > 0 ? "enrolled" : ""}" onclick="onPickName('${escapeHtml(name).replaceAll("'", "\\'")}')">
+      return `<button class="chip ${count > 0 ? "enrolled" : ""}" data-name="${escapeHtml(name)}" onclick="onPickName(this.dataset.name)">
         ${escapeHtml(label)}${count > 0 ? ` · ${count}` : ""}</button>`;
     })
     .join("");
@@ -45,7 +45,7 @@ function renderEnrollScreen() {
         <div class="enrolled-row">
           <span class="enrolled-name">${escapeHtml(name)}</span>
           <span class="enrolled-count">${counts[name]} frames</span>
-          <button class="delete-btn" onclick="onDeleteItem('${escapeHtml(name).replaceAll("'", "\\'")}')">Delete</button>
+          <button class="delete-btn" data-name="${escapeHtml(name)}" onclick="onDeleteItem(this.dataset.name)">Delete</button>
         </div>`
       )
       .join("");
@@ -74,11 +74,13 @@ function onPickName(name) {
 
 async function onCapture() {
   const input = document.getElementById("item-name-input");
-  const itemName = input.value.trim();
+  const typedName = input.value.trim();
+  const itemName = typedName.toLowerCase() === CONFIG.BACKGROUND_LABEL.toLowerCase() ? CONFIG.BACKGROUND_LABEL :
+    Object.keys(getEnrolledCounts()).find((name) => name.toLowerCase() === typedName.toLowerCase()) || typedName;
   const button = document.getElementById("capture-btn");
 
-  if (!itemName) {
-    showToast("Type an item name first");
+  if (!itemName || itemName.length > 79 || Object.hasOwn(Object.prototype, itemName) || ["prototype", CONFIG.UNKNOWN_LABEL].includes(itemName)) {
+    showToast("Use an item name between 1 and 79 characters");
     input.focus();
     return;
   }
@@ -91,37 +93,49 @@ async function onCapture() {
   isCapturing = true;
   button.disabled = true;
 
-  // Countdown, so staff can get the item ready before frames are grabbed.
-  for (let s = CONFIG.CAPTURE_COUNTDOWN_S; s > 0; s--) {
-    button.textContent = `Get ready… ${s}`;
-    showScanNotice(`Get ready… ${s}`, "warn");
-    await wait(1000);
+  document.getElementById("enroll-toggle-btn").disabled = true;
+  let accepted = 0;
+  try {
+    for (let s = CONFIG.CAPTURE_COUNTDOWN_S; s > 0; s--) {
+      button.textContent = `Get ready… ${s}`;
+      showScanNotice(`Get ready… ${s}`, "warn");
+      await wait(1000);
+    }
+    showScanNotice(itemName === CONFIG.BACKGROUND_LABEL ? "Keep the area empty" : "Turn the item slowly", "success");
+    button.textContent = "Learning… vary the angle";
+    for (let i = 0; i < CONFIG.FRAMES_PER_CAPTURE; i++) {
+      if (!isCameraReady()) throw new Error("Camera disconnected. Try capturing again.");
+      if (addExampleFromVideo(getCameraVideo(), itemName)) accepted++;
+      setCaptureProgress(i + 1, CONFIG.FRAMES_PER_CAPTURE);
+      await wait(CONFIG.CAPTURE_INTERVAL_MS);
+    }
+    if (accepted) trimExamples(itemName);
+    const saved = saveItems();
+    showToast(!accepted ? "No usable views. Keep the item visible and check the lighting." :
+      !saved ? "Storage full. Export a backup before closing." :
+      `Learned ${itemName}: ${accepted} views + lighting and framing variations`);
+  } catch (err) {
+    saveItems();
+    showToast(err.message || "Capture failed. Please try again.");
+  } finally {
+    isCapturing = false;
+    button.disabled = false;
+    document.getElementById("enroll-toggle-btn").disabled = false;
+    button.textContent = "Capture item";
+    setCaptureProgress(0, 1);
+    renderEnrollScreen();
   }
-  showScanNotice("Swipe it across now!", "success");
-  button.textContent = "Capturing… keep swiping";
-
-  for (let i = 0; i < CONFIG.FRAMES_PER_CAPTURE; i++) {
-    addExampleFromVideo(getCameraVideo(), itemName);
-    setCaptureProgress(i + 1, CONFIG.FRAMES_PER_CAPTURE);
-    await wait(CONFIG.CAPTURE_INTERVAL_MS);
-  }
-
-  const saved = saveItems();
-  isCapturing = false;
-  button.disabled = false;
-  button.textContent = "📸 Capture frames";
-  setCaptureProgress(0, 1);
-  renderEnrollScreen();
-  showToast(saved ? `Learned "${itemName}"` : "Learned, but browser storage is full. Use Export to back up.");
 }
 
 function onDeleteItem(name) {
+  if (isCapturing) return;
   if (!confirm(`Delete everything learned for "${name}"?`)) return;
   deleteItem(name);
   renderEnrollScreen();
 }
 
 function onDeleteAllItems() {
+  if (isCapturing) return;
   if (!confirm("Delete ALL enrolled items? This can't be undone (unless you exported a backup).")) return;
   deleteAllItems();
   renderEnrollScreen();
@@ -136,22 +150,23 @@ function onExportItems() {
   const blob = new Blob([exportItemsAsText()], { type: "application/json" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = "packpal-items.json";
+  link.download = "packem-items.json";
   link.click();
   URL.revokeObjectURL(link.href);
 }
 
 // Load items from a backup file. Replaces what's currently enrolled.
 function onImportItems(fileInput) {
+  if (isCapturing) { fileInput.value = ""; return; }
   const file = fileInput.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
     try {
       importItemsFromText(reader.result);
-      saveItems();
+      const saved = saveItems();
       renderEnrollScreen();
-      showToast("Items imported");
+      showToast(saved ? "Items imported" : "Imported, but storage is full. Keep your backup.");
     } catch (err) {
       showToast("That file couldn't be read");
     }

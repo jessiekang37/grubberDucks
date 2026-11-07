@@ -1,8 +1,9 @@
 {
-  "name": "packpal",
+  "name": "packem",
   "version": "1.0.0",
   "description": "Catches missing items before a delivery order leaves the store",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
   }
 }

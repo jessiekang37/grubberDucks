@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PackPal</title>
+  <title>Pack’em</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,9 +11,9 @@
 
     <!-- Top bar -->
     <header class="top-bar">
-      <div class="logo">Pack<span>Pal</span></div>
+      <div class="brand"><div class="logo">pack<span>’em</span><span class="brand-dot">.</span></div><span class="brand-caption">Every item. Every order.</span></div>
       <div class="top-bar-right">
-        <button id="enroll-toggle-btn" class="top-btn" onclick="onToggleEnrollScreen()">Enroll items</button>
+        <button id="enroll-toggle-btn" class="top-btn" onclick="onToggleEnrollScreen()">Teach menu</button>
         <label class="demo-switch">
           <input type="checkbox" id="demo-toggle" onchange="onToggleDemoMode()">
           <span class="switch-track"><span class="switch-thumb"></span></span>
@@ -22,6 +22,12 @@
       </div>
     </header>
 
+    <div class="station-bar">
+      <span class="station-label"><span class="live-dot"></span> Packing station</span>
+      <div id="station-stats" class="station-stats"></div>
+      <span id="ai-status" class="ai-status">Checking AI connection…</span>
+    </div>
+
     <!-- ===================== MAIN SCREEN: orders ===================== -->
     <main id="main-screen" class="main">
 
@@ -29,18 +35,23 @@
       <aside class="sidebar">
         <div class="queue-header">
           <h3 class="section-title">Order queue</h3>
-          <button class="scan-ticket-btn" onclick="onOpenTicketScanner()">＋ Scan ticket</button>
+          <button class="scan-ticket-btn" onclick="onOpenTicketScanner()">＋ Add order</button>
         </div>
+        <input id="queue-search" class="queue-search" type="search" placeholder="Find order or customer" aria-label="Find order or customer" oninput="renderQueue()">
         <div id="queue-list" class="queue-list"></div>
 
         <h3 class="section-title">Ready for pickup</h3>
         <div id="ready-list" class="ready-list"></div>
+        <button class="reset-orders" onclick="onResetOrders()">Reset sample queue</button>
       </aside>
 
       <!-- RIGHT: active order -->
       <section class="active-order">
         <div class="checklist-panel">
+          <div class="eyebrow">Pack & verify</div>
           <div id="order-header" class="order-header"></div>
+          <div id="order-progress" class="order-progress"></div>
+          <p class="checklist-help">Scan each item, or tap to confirm it by hand.</p>
           <ul id="checklist" class="checklist"></ul>
           <div id="missing-warning" class="missing-warning" role="alert"></div>
           <button id="mark-ready-btn" class="mark-ready-btn" onclick="onMarkReady()">Mark ready</button>
@@ -49,11 +60,13 @@
         <div id="main-camera-slot" class="camera-panel">
           <!-- The camera box lives here. It moves to the enroll screen when that's open. -->
           <div id="camera-box" class="camera-box">
+            <div class="camera-heading"><span class="eyebrow">Live verification</span><span class="local-tag">On-device</span></div>
             <div class="video-wrap">
               <video id="camera-video" autoplay muted playsinline></video>
+              <div class="camera-guide" aria-hidden="true"></div>
               <div id="scan-notice" class="scan-notice"></div>
-              <div id="ai-checking" class="ai-checking"><span class="spinner"></span>Checking with AI…</div>
-              <div id="thumbs-indicator" class="thumbs-indicator">
+              <div id="ai-checking" class="ai-checking" aria-hidden="true"><span class="spinner"></span>Checking with AI…</div>
+              <div id="thumbs-indicator" class="thumbs-indicator" aria-hidden="true">
                 <span>👍 Marking ready…</span>
                 <div class="thumbs-track"><div id="thumbs-bar" class="thumbs-bar"></div></div>
               </div>
@@ -66,6 +79,12 @@
               </div>
               <div class="confidence-track"><div id="confidence-bar" class="confidence-bar"></div></div>
             </div>
+            <p id="match-detail" class="match-detail">Match scores appear here once your menu is taught.</p>
+            <div class="camera-actions">
+              <button id="pause-scan-btn" class="small-btn" onclick="onToggleScanning()" aria-pressed="false">Pause scanning</button>
+              <button id="ai-photo-btn" class="small-btn" onclick="onCheckWithAi()" disabled>Check photo with AI</button>
+            </div>
+            <p class="camera-help">One item at a time. Clear the view between items.<br>AI photo checks also work without menu training.</p>
             <div id="confirm-panel" class="confirm-panel" hidden>
               <p id="confirm-reason" class="confirm-reason"></p>
               <div id="confirm-choices" class="confirm-choices"></div>
@@ -83,24 +102,23 @@
       <div id="enroll-camera-slot" class="enroll-camera"></div>
 
       <div class="enroll-panel">
-        <h2>Teach PackPal an item</h2>
+        <div class="eyebrow">A little practice goes a long way</div><h2>Meet your menu.</h2>
         <p class="enroll-help">
-          Type the item's name (it must match the name on orders) and press Capture.
-          After a 3-second countdown, it captures for ~6 seconds. <strong>Swipe the item across the camera a few times at
-          real packing speed</strong>, from different sides and angles, so PackPal learns what a blurry,
-          moving item looks like. Capture twice per item for best results.
+          Start with the empty packing area, then teach each item. Keep it visible and slowly turn it
+          through a few angles for about 5 seconds after the countdown. We add lighting and framing
+          variations automatically. Try a scan, then capture again if a particular angle is missed.
         </p>
 
         <div id="enroll-tip" class="enroll-tip">
           👉 First, enroll <strong>Nothing (empty area)</strong>: point the camera at the empty packing
-          area, with your hands moving around but no item. This stops PackPal from "seeing" items that aren't there.
+          area, with your hands moving around but no item. This stops Pack’em from "seeing" items that aren't there.
         </div>
 
         <div id="name-suggestions" class="chips"></div>
 
         <div class="capture-row">
-          <input id="item-name-input" class="name-input" type="text" placeholder="Item name, e.g. Coffee" autocomplete="off">
-          <button id="capture-btn" class="capture-btn" onclick="onCapture()">📸 Capture frames</button>
+          <input id="item-name-input" class="name-input" type="text" placeholder="Item name, e.g. Coffee" aria-label="Item name" maxlength="79" autocomplete="off">
+          <button id="capture-btn" class="capture-btn" onclick="onCapture()">Capture item</button>
         </div>
         <div class="capture-progress"><div id="capture-progress-bar" class="capture-progress-bar"></div></div>
 
@@ -120,9 +138,9 @@
 
     <!-- ===================== TICKET SCANNER (pop-up) ===================== -->
     <div id="ticket-modal" class="modal-backdrop" hidden>
-      <div class="modal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ticket-title">
         <div class="modal-header">
-          <h2>Scan an order ticket</h2>
+          <h2 id="ticket-title">Add an order</h2>
           <button class="top-btn" onclick="onCloseTicketScanner()">✕ Close</button>
         </div>
         <div class="modal-body">
@@ -130,6 +148,7 @@
 
           <div class="ticket-panel">
             <div id="ticket-step-capture">
+              <button class="small-btn wide" onclick="onManualOrder()">Enter order manually</button>
               <p class="enroll-help">Hold the ticket flat and close to the camera so the text fills the picture, then take a photo.</p>
               <button class="capture-btn wide" onclick="onTakeTicketPhoto()">📸 Take photo</button>
               <label class="small-btn wide">⬆ Upload photo instead
@@ -143,9 +162,10 @@
             </div>
 
             <div id="ticket-step-review" hidden>
-              <p class="enroll-help">Check what the AI read. Fix quantities with − / +, then add the order.</p>
+              <p class="enroll-help">Review the order, item names, and notes. Change anything before adding it.</p>
               <div id="ticket-summary" class="ticket-summary"></div>
               <div id="ticket-items" class="ticket-items"></div>
+              <button class="small-btn" onclick="onAddTicketLine()">＋ Add item</button>
               <div class="ticket-actions">
                 <button class="small-btn" onclick="showTicketStep('capture')">Retake</button>
                 <button id="add-ticket-btn" class="capture-btn" onclick="onAddTicketOrder()">Add order</button>
@@ -161,7 +181,7 @@
       </div>
     </div>
 
-    <div id="toast" class="toast"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
   <!-- AI libraries (saved locally in /vendor so they work without internet) -->
@@ -174,6 +194,7 @@
   <script src="js/orders.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/camera.js"></script>
+  <script src="js/matching.js"></script>
   <script src="js/recognizer.js"></script>
   <script src="js/enroll.js"></script>
   <script src="js/sounds.js"></script>

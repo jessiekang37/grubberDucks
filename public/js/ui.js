@@ -13,7 +13,7 @@ function escapeHtml(text) {
 
 // "Uber Eats" -> "uber-eats" so CSS can color each platform tag.
 function platformClass(platform) {
-  return "platform-" + platform.toLowerCase().replace(/\s+/g, "-");
+  return "platform-" + platform.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z-]/g, "");
 }
 
 const STATUS_LABELS = { waiting: "Waiting", packing: "Packing", ready: "Ready" };
@@ -21,11 +21,12 @@ const STATUS_LABELS = { waiting: "Waiting", packing: "Packing", ready: "Ready" }
 // ---- Left side: order queue ----
 function renderQueue() {
   const queueEl = document.getElementById("queue-list");
-  const queue = getQueueOrders();
+  const query = document.getElementById("queue-search").value.trim().toLowerCase();
+  const queue = getQueueOrders().filter((order) => `${order.number} ${order.customer} ${order.platform}`.toLowerCase().includes(query));
   const active = getActiveOrder();
 
   if (queue.length === 0) {
-    queueEl.innerHTML = `<p class="empty-note">All orders packed 🎉</p>`;
+    queueEl.innerHTML = `<p class="empty-note">${query ? "No matching orders" : "All orders packed. Nicely done."}</p>`;
     return;
   }
 
@@ -38,6 +39,7 @@ function renderQueue() {
             <span class="order-number">#${escapeHtml(order.number)}</span>
             <span class="platform-tag ${platformClass(order.platform)}">${escapeHtml(order.platform)}</span>
           </div>
+          <div class="queue-customer">${escapeHtml(order.customer)}</div>
           <div class="queue-card-bottom">
             <span>${countScanned(order)} / ${countItems(order)} items</span>
             <span class="status status-${order.status}">${STATUS_LABELS[order.status]}</span>
@@ -80,6 +82,7 @@ function renderChecklist() {
     headerEl.innerHTML = `<h2>No active order</h2>`;
     listEl.innerHTML = "";
     readyBtn.style.display = "none";
+    document.getElementById("order-progress").innerHTML = "";
     return;
   }
 
@@ -98,13 +101,14 @@ function renderChecklist() {
       const done = item.scanned >= item.qty;
       const cameraKnowsIt = enrolledNames.includes(item.name.toLowerCase());
       const tapOnlyTag =
-        !done && hasEnrolledItems() && !cameraKnowsIt ? `<span class="tap-only-tag">tap only</span>` : "";
+        !done && !cameraKnowsIt ? `<span class="tap-only-tag">AI or tap</span>` : "";
       return `
         <li class="check-item ${done ? "done" : ""}" data-item-index="${index}">
           <button class="check-main" onclick="onTapItem(${index})" ${done ? "disabled" : ""}>
             <span class="checkbox">${done ? "✓" : ""}</span>
             <span class="item-name">${escapeHtml(item.name)} ${tapOnlyTag}
-              ${item.note ? `<span class="item-note">${escapeHtml(item.note)}</span>` : ""}</span>
+              ${item.note ? `<span class="item-note">${escapeHtml(item.note)}</span>` : ""}
+              ${item.scanned ? `<span class="scan-source">Last confirmed: ${escapeHtml(item.lastSource || "staff")}</span>` : ""}</span>
             <span class="item-count">${item.scanned} / ${item.qty}</span>
           </button>
           <button class="undo-btn" onclick="onUndoItem(${index})" ${item.scanned === 0 ? "disabled" : ""}
@@ -119,6 +123,8 @@ function renderChecklist() {
   readyBtn.style.display = "block";
   readyBtn.classList.toggle("is-ready", allDone);
   readyBtn.textContent = allDone ? "✓ Mark ready" : `Mark ready (${countScanned(order)}/${countItems(order)})`;
+  const percent = Math.round(countScanned(order) / countItems(order) * 100);
+  document.getElementById("order-progress").innerHTML = `<div class="progress-caption"><span>${allDone ? "Everything accounted for" : `${countItems(order) - countScanned(order)} ${countItems(order) - countScanned(order) === 1 ? "item" : "items"} left to pack`}</span><strong>${percent}%</strong></div><div class="order-track"><div style="width:${percent}%"></div></div>`;
 }
 
 // ---- Red "missing items" warning ----
@@ -162,8 +168,10 @@ function renderPrediction(result) {
   const barEl = document.getElementById("confidence-bar");
   const percentEl = document.getElementById("confidence-percent");
 
-  if (!result || result.label === CONFIG.BACKGROUND_LABEL) {
-    labelEl.textContent = "No item";
+  const detail = document.getElementById("match-detail");
+  if (!result || result.label === CONFIG.BACKGROUND_LABEL || result.label === CONFIG.UNKNOWN_LABEL) {
+    labelEl.textContent = !result ? "Ready to learn" : result.label === CONFIG.BACKGROUND_LABEL ? "Clear view" : "Unfamiliar item";
+    detail.textContent = result?.reason || (result ? "Ready for the next item" : "Teach the menu to enable local recognition.");
     labelEl.classList.add("dim");
     barEl.style.width = "0%";
     percentEl.textContent = "";
@@ -171,11 +179,12 @@ function renderPrediction(result) {
   }
 
   const percent = Math.round(result.confidence * 100);
+  detail.textContent = result.reason || (result.reliable ? "Strong match · hold briefly to confirm" : "Checking the match · hold steady");
   labelEl.textContent = result.label;
   labelEl.classList.remove("dim");
   barEl.style.width = percent + "%";
-  barEl.classList.toggle("above-threshold", result.confidence >= CONFIG.SCAN_CONFIDENCE);
-  percentEl.textContent = percent + "%";
+  barEl.classList.toggle("above-threshold", result.reliable);
+  percentEl.textContent = percent + "% match";
 }
 
 // ---- Scanning feedback (Milestone 3) ----
@@ -212,6 +221,8 @@ function flashChecklistItem(itemIndex) {
 // ---- AI fallback feedback (Milestone 4) ----
 function showAiChecking(isChecking) {
   document.getElementById("ai-checking").classList.toggle("visible", isChecking);
+  document.getElementById("ai-checking").setAttribute("aria-hidden", String(!isChecking));
+  document.getElementById("ai-photo-btn").disabled = isChecking || scannerPaused || !aiAvailable || !getActiveOrder();
 }
 
 // choices = [{ name, index }] items staff can tap to confirm
@@ -232,6 +243,7 @@ function hideConfirmPanel() {
 function setThumbsUpProgress(progress) {
   const indicator = document.getElementById("thumbs-indicator");
   indicator.classList.toggle("visible", progress > 0);
+  indicator.setAttribute("aria-hidden", String(progress <= 0));
   document.getElementById("thumbs-bar").style.width = Math.round(progress * 100) + "%";
 }
 
@@ -240,4 +252,11 @@ function render() {
   renderQueue();
   renderReady();
   renderChecklist();
+  renderStation();
+}
+
+function renderStation() {
+  document.getElementById("station-stats").innerHTML = `<span><strong>${getQueueOrders().length}</strong> in queue</span><span><strong>${getReadyOrders().length}</strong> ready</span><span class="saved-tag">Progress saved locally</span>`;
+  document.querySelector(".station-label").classList.toggle("paused", scannerPaused);
+  document.getElementById("ai-photo-btn").disabled = scannerPaused || aiChecksRunning > 0 || !aiAvailable || !getActiveOrder();
 }

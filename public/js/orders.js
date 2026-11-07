@@ -50,7 +50,7 @@ const MOCK_ORDERS = [
 
 // Demo mode orders, designed for the pitch.
 // Order 2001 is "the forgotten drink": pack the Muffin, skip the Coffee,
-// tap "Mark ready", and PackPal blocks it and names the Coffee.
+// tap "Mark ready", and Pack’em blocks it and names the Coffee.
 const DEMO_ORDERS = [
   {
     number: "2001",
@@ -87,6 +87,33 @@ const DEMO_ORDERS = [
 // ---- Current state ----
 let orders = [];         // every order, including ready ones
 let activeOrderId = null; // the order shown on the right side
+let orderStorageKey = "packem-orders-main";
+
+function saveOrders() {
+  try { localStorage.setItem(orderStorageKey, JSON.stringify({ orders, activeOrderId })); }
+  catch { if (typeof showToast === "function") showToast("Order progress could not be saved on this device."); }
+}
+
+function restoreOrders(isDemo) {
+  orderStorageKey = isDemo ? "packem-orders-demo" : "packem-orders-main";
+  try {
+    const saved = JSON.parse(localStorage.getItem(orderStorageKey));
+    if (!saved || !Array.isArray(saved.orders) || saved.orders.length > 500) return false;
+    const ids = new Set();
+    for (const order of saved.orders) {
+      if (!/^order-[\w-]+$/.test(order.id) || ids.has(order.id) || !["waiting", "packing", "ready"].includes(order.status) ||
+          ![order.number, order.customer, order.platform].every((value) => typeof value === "string") ||
+          !Array.isArray(order.items) || !order.items.length || !order.items.every((item) =>
+            typeof item.name === "string" && item.name.trim() && Number.isInteger(item.qty) && item.qty > 0 && item.qty <= 20 &&
+            Number.isInteger(item.scanned) && item.scanned >= 0 && item.scanned <= item.qty) ||
+          (order.status === "ready" && order.items.some((item) => item.scanned !== item.qty))) return false;
+      ids.add(order.id);
+    }
+    orders = saved.orders;
+    activeOrderId = orders.find((order) => order.id === saved.activeOrderId && order.status !== "ready")?.id || getQueueOrders()[0]?.id || null;
+    return true;
+  } catch { return false; }
+}
 
 // Replace all orders with a fresh copy of a list (mock or demo).
 // Each item gets a "scanned" counter that starts at 0.
@@ -100,12 +127,13 @@ function loadOrders(list) {
     items: order.items.map((item) => ({ name: item.name, qty: item.qty, scanned: 0 })),
   }));
   activeOrderId = orders.length > 0 ? orders[0].id : null;
+  saveOrders();
 }
 
 // Add one brand-new order (used later by "ticket photo to order").
 function addOrder(order) {
   const newOrder = {
-    id: "order-" + Date.now(),
+    id: "order-" + crypto.randomUUID(),
     number: order.number,
     platform: order.platform,
     customer: order.customer || "",
@@ -114,6 +142,7 @@ function addOrder(order) {
     items: order.items.map((item) => ({ name: item.name, qty: item.qty, note: item.note || "", scanned: 0 })),
   };
   orders.push(newOrder);
+  saveOrders();
   return newOrder;
 }
 
@@ -127,6 +156,7 @@ function getActiveOrder() {
 
 function setActiveOrder(orderId) {
   activeOrderId = orderId;
+  saveOrders();
 }
 
 // Orders still being worked on.
@@ -151,24 +181,28 @@ function countScanned(order) {
 // Find an item on an order by name, ignoring upper/lower case.
 function findItemByName(order, name) {
   const wanted = name.trim().toLowerCase();
-  return order.items.find((item) => item.name.toLowerCase() === wanted);
+  return order.items.find((item) => item.name.toLowerCase() === wanted && item.scanned < item.qty) ||
+    order.items.find((item) => item.name.toLowerCase() === wanted);
 }
 
 // Check off ONE unit of an item. Returns true if it worked,
 // false if the item is already fully scanned.
-function checkOffItem(order, itemIndex) {
+function checkOffItem(order, itemIndex, source = "staff") {
   const item = order.items[itemIndex];
-  if (!item || item.scanned >= item.qty) return false;
+  if (order.status === "ready" || !item || item.scanned >= item.qty) return false;
   item.scanned += 1;
+  item.lastSource = source;
   if (order.status === "waiting") order.status = "packing";
+  saveOrders();
   return true;
 }
 
 // Undo ONE unit (in case of a mistake).
 function undoItem(order, itemIndex) {
   const item = order.items[itemIndex];
-  if (!item || item.scanned <= 0) return false;
+  if (order.status === "ready" || !item || item.scanned <= 0) return false;
   item.scanned -= 1;
+  saveOrders();
   return true;
 }
 
@@ -184,10 +218,12 @@ function getMissingItems(order) {
 // This is plain, predictable code. The AI (Milestone 4) can check off items,
 // but it never calls this function and can never complete an order by itself.
 function markOrderReady(order) {
+  if (!order.items.length) return { ok: false, missing: [] };
   const missing = getMissingItems(order);
   if (missing.length > 0) {
     return { ok: false, missing: missing };
   }
   order.status = "ready";
+  saveOrders();
   return { ok: true, missing: [] };
 }
