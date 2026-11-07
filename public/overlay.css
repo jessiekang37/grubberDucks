@@ -1,0 +1,72 @@
+/* overlay.css: scan visuals inside the scan zone (see js/overlay.js).
+   Kept in its own file so it never conflicts with styles.css.
+   Deliberately quiet: thin corner marks, a small label, a brief border flash. */
+
+.scan-overlay {
+  --lock: 0;       /* scan confirmation progress, 0..1 (set by overlay.js) */
+  --tone: rgba(255, 255, 255, 0.7);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.scan-overlay.state-detecting { --tone: #e3d9a6; }
+.scan-overlay.state-match { --tone: #c5ee83; }
+.scan-overlay.state-unknown { --tone: #f0a99f; }
+
+/* ---- Corner marks: tighten slightly as the scan is confirmed ---- */
+.scan-corner {
+  position: absolute;
+  width: 16%;
+  height: 16%;
+  border: 0 solid var(--tone);
+  transition: transform 0.12s ease-out, border-color 0.15s;
+}
+.scan-corner.tl { top: -2px; left: -2px; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 12px;
+  transform: translate(calc(var(--lock) * 6px), calc(var(--lock) * 6px)); }
+.scan-corner.tr { top: -2px; right: -2px; border-top-width: 3px; border-right-width: 3px; border-top-right-radius: 12px;
+  transform: translate(calc(var(--lock) * -6px), calc(var(--lock) * 6px)); }
+.scan-corner.bl { bottom: -2px; left: -2px; border-bottom-width: 3px; border-left-width: 3px; border-bottom-left-radius: 12px;
+  transform: translate(calc(var(--lock) * 6px), calc(var(--lock) * -6px)); }
+.scan-corner.br { bottom: -2px; right: -2px; border-bottom-width: 3px; border-right-width: 3px; border-bottom-right-radius: 12px;
+  transform: translate(calc(var(--lock) * -6px), calc(var(--lock) * -6px)); }
+
+/* ---- Small label under the box edge with the live match ---- */
+.scan-label {
+  position: absolute;
+  left: 0;
+  bottom: 8px;
+  width: 100%;
+  text-align: center;
+  color: var(--tone);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.15s;
+}
+.scan-label:empty { opacity: 0; }
+
+/* ---- Brief border flash when a scan counts or is rejected ---- */
+.scan-overlay::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 3px solid var(--tone);
+  opacity: 0;
+}
+.scan-overlay.flash-success { --tone: #c5ee83; --lock: 1; }
+.scan-overlay.flash-warn { --tone: #f0a99f; }
+.scan-overlay.flash-success::after,
+.scan-overlay.flash-warn::after { animation: scan-border 0.7s ease-out forwards; }
+@keyframes scan-border { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-corner { transition: none; }
+}

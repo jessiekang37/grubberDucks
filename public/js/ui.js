@@ -169,6 +169,7 @@ function renderPrediction(result) {
   const percentEl = document.getElementById("confidence-percent");
 
   const detail = document.getElementById("match-detail");
+  if (typeof updateScanOverlay === "function") updateScanOverlay(result); // scan visuals (overlay.js)
   if (!result || result.label === CONFIG.BACKGROUND_LABEL || result.label === CONFIG.UNKNOWN_LABEL) {
     labelEl.textContent = !result ? "Ready to learn" : result.label === CONFIG.BACKGROUND_LABEL ? "Clear view" : "Unfamiliar item";
     detail.textContent = result?.reason || (result ? "Ready for the next item" : "Teach the menu to enable local recognition.");
@@ -193,6 +194,7 @@ function renderPrediction(result) {
 // progress goes from 0 to 1.
 function setHoldProgress(progress) {
   document.getElementById("hold-bar").style.width = Math.round(progress * 100) + "%";
+  if (typeof setScanOverlayLock === "function") setScanOverlayLock(progress); // scan visuals (overlay.js)
 }
 
 // Big message over the camera, e.g. "✓ Coffee 1/2". kind = "success" or "warn".
@@ -202,6 +204,7 @@ function showScanNotice(message, kind) {
   const cameraBox = document.getElementById("camera-box");
   noticeEl.textContent = message;
   noticeEl.className = "scan-notice visible " + kind;
+  if (typeof flashScanOverlay === "function") flashScanOverlay(kind); // scan visuals (overlay.js)
   cameraBox.classList.remove("flash-success", "flash-warn");
   void cameraBox.offsetWidth; // restart the flash animation
   cameraBox.classList.add("flash-" + kind);
