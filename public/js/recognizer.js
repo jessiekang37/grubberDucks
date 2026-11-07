@@ -45,7 +45,8 @@ function getExampleCache() {
 function addExampleFromVideo(videoEl, itemName) {
   const ctx = trainingCanvas.getContext("2d", { willReadFrequently: true });
   ctx.filter = "none";
-  ctx.drawImage(videoEl, 0, 0, 224, 224);
+  const zone = getScanZone(videoEl); // only the middle of the picture
+  ctx.drawImage(videoEl, zone.x, zone.y, zone.size, zone.size, 0, 0, 224, 224);
   const pixels = ctx.getImageData(0, 0, 224, 224).data;
   let light = 0;
   for (let i = 0; i < pixels.length; i += 16) light += (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
@@ -53,9 +54,9 @@ function addExampleFromVideo(videoEl, itemName) {
   if (light < 22 || light > 245) return false;
   const background = itemName !== CONFIG.BACKGROUND_LABEL ? getExampleCache()[CONFIG.BACKGROUND_LABEL] : null;
   for (const [scale, exposure] of [[1, 1], [0.86, 0.85], [1, 1.15]]) {
-    const w = videoEl.videoWidth, h = videoEl.videoHeight;
+    const side = zone.size * scale; // zoom in slightly within the scan zone
     ctx.filter = `brightness(${exposure})`;
-    ctx.drawImage(videoEl, w * (1 - scale) / 2, h * (1 - scale) / 2, w * scale, h * scale, 0, 0, 224, 224);
+    ctx.drawImage(videoEl, zone.x + (zone.size - side) / 2, zone.y + (zone.size - side) / 2, side, side, 0, 0, 224, 224);
     const embedding = featureModel.infer(trainingCanvas, true);
     try {
       if (scale === 1 && exposure === 1 && background) {
@@ -87,9 +88,15 @@ function trimExamples(itemName) {
   exampleCache = null;
 }
 
+// Reused every frame: holds just the scan zone, shrunk to MobileNet's 224×224 size.
+const scanCanvas = document.createElement("canvas");
+scanCanvas.width = scanCanvas.height = 224;
+
 async function predictFromVideo(videoEl) {
   if (!hasEnrolledItems()) return null;
-  const embedding = featureModel.infer(videoEl, true);
+  const zone = getScanZone(videoEl);
+  scanCanvas.getContext("2d").drawImage(videoEl, zone.x, zone.y, zone.size, zone.size, 0, 0, 224, 224);
+  const embedding = featureModel.infer(scanCanvas, true);
   try { return rankEmbedding(await embedding.data(), getExampleCache(), CONFIG); }
   finally { embedding.dispose(); }
 }

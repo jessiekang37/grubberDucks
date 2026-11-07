@@ -726,7 +726,19 @@ body { font-size: 17px; overflow: auto; }
 .local-tag { font-size: 10px; border: 1px solid #607466; border-radius: 30px; padding: 4px 8px; color: #d6e5ce; }
 .camera-box { gap: 16px; }
 .video-wrap { aspect-ratio: 1 / 1; border-radius: 12px; background: #13271e; }
-.camera-guide { position: absolute; inset: 16%; border: 1px dashed #ffffff60; border-radius: 16px; pointer-events: none; }
+/* The scan zone: only what's inside this box is scanned. The huge shadow dims
+   everything outside it. JavaScript sets the exact size (updateScanZoneGuide). */
+.camera-guide {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 60%; height: 60%;
+  transform: translate(-50%, -50%);
+  border: 2px dashed #ffffffcc;
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.ticket-camera .camera-guide { display: none; } /* tickets use the whole picture */
 .prediction-label { font-size: 24px; }
 .prediction-label.dim, .confidence-percent { color: #b1c6b4; }
 .confidence-percent { font-size: 12px; white-space: nowrap; }

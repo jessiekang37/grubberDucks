@@ -17,6 +17,12 @@ const CONFIG = {
   // frames aren't of your hand coming back from the button.
   CAPTURE_COUNTDOWN_S: 3,
 
+  // Only the middle of the camera view is used for teaching and scanning, so
+  // shoulders, faces, and background at the edges are ignored. This is the size
+  // of that square "scan zone" as a fraction of the camera's shorter side
+  // (1 = whole height). Re-teach your items after changing it.
+  SCAN_ZONE_SIZE: 0.6,
+
   // Pause between recognition attempts (milliseconds). Small = fast scanning.
   // The real speed is limited by how fast the laptop runs the model (~20-30 per second).
   PREDICT_INTERVAL_MS: 30,

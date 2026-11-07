@@ -136,6 +136,7 @@ let lastThumbsUpScore = 0;
 
 async function cameraLoop() {
   try {
+    if (isCameraReady()) updateScanZoneGuide();
     if (isCameraReady() && !isCapturing) {
       const video = getCameraVideo();
       const scanning = isOrderScreenActive();

@@ -63,9 +63,11 @@ function isLookalike(label) {
 function saveBestFrame() {
   const video = getCameraVideo();
   if (!video || !video.videoWidth) return;
-  bestFrameCanvas.width = video.videoWidth;
-  bestFrameCanvas.height = video.videoHeight;
-  bestFrameCanvas.getContext("2d").drawImage(video, 0, 0);
+  // Save just the scan zone, so the AI isn't distracted by the background.
+  const zone = getScanZone(video);
+  bestFrameCanvas.width = zone.size;
+  bestFrameCanvas.height = zone.size;
+  bestFrameCanvas.getContext("2d").drawImage(video, zone.x, zone.y, zone.size, zone.size, 0, 0, zone.size, zone.size);
 }
 
 function startCandidate(label, now) {
