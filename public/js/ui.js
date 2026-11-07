@@ -260,7 +260,7 @@ function render() {
 }
 
 function renderStation() {
-  document.getElementById("station-stats").innerHTML = `<span><strong>${getQueueOrders().length}</strong> in queue</span><span><strong>${getReadyOrders().length}</strong> ready</span><span class="saved-tag">Progress saved locally</span>`;
+  document.getElementById("station-stats").innerHTML = `<span><strong>${getQueueOrders().length}</strong> in queue</span><span><strong>${getReadyOrders().length}</strong> ready</span><span class="saved-tag">Progress saved locally</span>${typeof catchStatsHtml === "function" ? catchStatsHtml() : ""}`;
   document.querySelector(".station-label").classList.toggle("paused", scannerPaused);
   document.getElementById("ai-photo-btn").disabled = scannerPaused || aiChecksRunning > 0 || !aiAvailable || !getActiveOrder();
 }

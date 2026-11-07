@@ -1,0 +1,33 @@
+/* stats.css: "missing items caught" counter in the station bar (see js/stats.js).
+   Kept in its own file so it never conflicts with styles.css. */
+
+.catch-stats {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 4px 12px;
+  margin-left: 6px;
+  border-left: 1px solid var(--border);
+  border-radius: 8px;
+}
+.catch-stats strong { color: var(--text); }
+.catch-est {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0.8;
+}
+.catch-stats.bump { animation: catch-bump 1.2s ease-out; }
+@keyframes catch-bump {
+  0% { background: #e4f3cf; }
+  100% { background: transparent; }
+}
+
+@media (max-width: 900px) {
+  .catch-stats { margin-left: 0; border-left: 0; padding-left: 0; flex-wrap: wrap; gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .catch-stats.bump { animation: none; }
+}

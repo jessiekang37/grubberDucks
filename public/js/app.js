@@ -46,6 +46,7 @@ function onMarkReady(byThumbsUp = false) {
   if (!result.ok) {
     showMissingWarning(result.missing);
     playSound("error");
+    if (typeof recordMissingItemsCaught === "function") recordMissingItemsCaught(order, result.missing); // stats.js
     return;
   }
 
