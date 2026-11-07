@@ -31,22 +31,28 @@ const CONFIG = {
   // ---- Scanning (Milestone 3) ----
   // Tuned for SWIPING items across the camera: fast, slightly less accurate.
   // For a slower, more careful "hold it up" style, use:
-  //   SCAN_CONFIDENCE: 0.85, SWIPE_MIN_FRAMES: 6
+  //   SCAN_CONFIDENCE: 0.78, MIN_SIMILARITY: 0.72, MIN_CLASS_MARGIN: 0.045,
+  //   SWIPE_MIN_FRAMES: 3, SCAN_MIN_DURATION_MS: 180, RELEASE_MS: 400
 
   // How sure the camera must be for a frame to count as "confident" (0 to 1).
   // This is a heuristic match score, not a probability of correctness.
-  SCAN_CONFIDENCE: 0.78,
-  MIN_SIMILARITY: 0.72,
-  MIN_CLASS_MARGIN: 0.045,
+  // Raise toward 0.78 if the wrong item gets checked off.
+  SCAN_CONFIDENCE: 0.65,
+  // Below this similarity, a view counts as "unfamiliar" and is ignored.
+  MIN_SIMILARITY: 0.65,
+  // How far ahead the best item must be of the runner-up.
+  MIN_CLASS_MARGIN: 0.03,
   NEIGHBORS_PER_CLASS: 3,
   MIN_EXAMPLES: 6,
   MAX_EXAMPLES_PER_CLASS: 180,
   UNKNOWN_LABEL: "__unknown__",
-  SCAN_MIN_DURATION_MS: 180,
+  // Minimum time (ms) an item must be seen before it counts. 0 = as soon as
+  // SWIPE_MIN_FRAMES confident frames in a row arrive (best for swiping).
+  SCAN_MIN_DURATION_MS: 0,
 
-  // How many confident frames are needed to check an item off.
-  // Also require SCAN_MIN_DURATION_MS of evidence.
-  SWIPE_MIN_FRAMES: 3,
+  // How many confident frames IN A ROW are needed to check an item off.
+  // A swipe gives roughly 5-10 frames. Raise to 3 if items get scanned by accident.
+  SWIPE_MIN_FRAMES: 2,
 
   // How long (ms) with no sighting before we decide an item has left the view.
   SWIPE_GAP_MS: 150,
@@ -59,7 +65,7 @@ const CONFIG = {
 
   // A scanned item stays locked until a reliable EMPTY view lasts this long.
   // This is what stops one Coffee from being counted twice.
-  RELEASE_MS: 400,
+  RELEASE_MS: 150,
 
   // How long the "✓ Coffee 1/2" or "not on this order" message stays up (ms).
   SCAN_NOTICE_MS: 1800,
@@ -71,7 +77,8 @@ const CONFIG = {
 
   // If the camera's confidence is at least this but below SCAN_CONFIDENCE,
   // it's "unsure" and we ask the AI. Below this, we ignore it.
-  AI_LOW_CONFIDENCE: 0.4,
+  // (AI checks pause scanning, so a higher number = fewer pauses.)
+  AI_LOW_CONFIDENCE: 0.5,
 
   // Give up on the AI after this long (ms) and ask staff to tap-confirm instead.
   // Scanning keeps going while the AI thinks, so this doesn't slow staff down.
@@ -79,9 +86,11 @@ const CONFIG = {
 
   // Known lookalikes always need AI or staff confirmation, even if only one
   // is enrolled: lack of training for the other does not make them distinct.
+  // Every scan of an item in a group waits for the AI, which pauses scanning,
+  // so only list items that are genuinely hard to tell apart on your menu.
+  // Example to add if you sell them: ["Coffee", "Iced Coffee", "Latte"]
   LOOKALIKE_GROUPS: [
     ["Coke", "Diet Coke"],
-    ["Coffee", "Iced Coffee", "Latte"],
   ],
 
   // The "tap to confirm" panel closes by itself after this long (ms).

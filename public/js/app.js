@@ -171,7 +171,7 @@ async function cameraLoop() {
         else if (scannerPaused) setCameraStatus("Scanning paused. You can still check items by hand.");
         else if (!getEnrolledCounts()[CONFIG.BACKGROUND_LABEL]) setCameraStatus("Teach the empty area to enable automatic scans.");
         else if (lockedLabel) setCameraStatus("Move the item away. Show the empty area briefly before the next item.");
-        else setCameraStatus(result.reason || "Show one item at a time. Hold briefly, then move it away.");
+        else setCameraStatus(result.reason || "Swipe one item at a time through the view.");
       }
     }
   } catch (err) {

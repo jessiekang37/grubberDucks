@@ -112,14 +112,25 @@ function scannerContext() {
 }
 test('scan requires stable evidence and a truly empty gap before counting again', () => {
   const { run, frame } = scannerContext();
-  frame('Muffin', 0); frame('Muffin', 100);
-  assert.equal(run('countScanned(getActiveOrder())'), 0);
+  frame('Muffin', 0);
+  assert.equal(run('countScanned(getActiveOrder())'), 0); // one frame is never enough
+  frame('Muffin', 40);
+  assert.equal(run('countScanned(getActiveOrder())'), 1); // a quick swipe (2 frames) counts
   frame('Muffin', 200);
   assert.equal(run('countScanned(getActiveOrder())'), 1);
   frame('Coffee', 500); frame('Coffee', 800); frame('Muffin', 1000);
   assert.equal(run('countScanned(getActiveOrder())'), 1);
   frame('Nothing', 1100); frame('Nothing', 1500);
   frame('Muffin', 1600); frame('Muffin', 1700); frame('Muffin', 1800);
+  assert.equal(run('countScanned(getActiveOrder())'), 2);
+});
+test('a fast swipe with blurry edges counts once, and the next swipe counts again', () => {
+  const { run, frame } = scannerContext();
+  // ~25 frames per second: blurry entering, 2 clear frames, blurry leaving (~0.2 s)
+  frame('Muffin', 0, false); frame('Muffin', 40); frame('Muffin', 80); frame('Muffin', 120, false);
+  assert.equal(run('countScanned(getActiveOrder())'), 1);
+  frame('Nothing', 160); frame('Nothing', 200); frame('Nothing', 320); // brief empty view
+  frame('Muffin', 360, false); frame('Muffin', 400); frame('Muffin', 440);
   assert.equal(run('countScanned(getActiveOrder())'), 2);
 });
 test('uncertain frames reset the consecutive confident tally', () => {

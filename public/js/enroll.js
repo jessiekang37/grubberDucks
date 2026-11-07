@@ -101,7 +101,7 @@ async function onCapture() {
       showScanNotice(`Get ready… ${s}`, "warn");
       await wait(1000);
     }
-    showScanNotice(itemName === CONFIG.BACKGROUND_LABEL ? "Keep the area empty" : "Turn the item slowly", "success");
+    showScanNotice(itemName === CONFIG.BACKGROUND_LABEL ? "Keep the area empty" : "Swipe it across a few times", "success");
     button.textContent = "Learning… vary the angle";
     for (let i = 0; i < CONFIG.FRAMES_PER_CAPTURE; i++) {
       if (!isCameraReady()) throw new Error("Camera disconnected. Try capturing again.");
